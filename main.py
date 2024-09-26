@@ -24,6 +24,7 @@ BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
+BORDER_COLOR = (255, 0, 0)  # Red for the world border
 
 
 # Create the screen object
@@ -48,32 +49,49 @@ class Tank:
        self.world_y = WORLD_HEIGHT // 2  # Start tank in the middle of the world
        self.bullets = []  # List to hold bullets
        self.autofire = False  # Autofire state
+       self.autospin = False  # Autospin state
        self.shoot_cooldown = 0  # Cooldown timer for autofire
-       self.cannon_thickness = 10  # Thicker cannon like a Diep.io tank
+       self.cannon_thickness = 25  # Thicker cannon like a Diep.io tank
 
 
    def draw(self):
+
+       # Draw the cannon to indicate direction (thicker line for cannon)
+       cannon_length = 75
+       end_x = self.x + math.cos(self.angle) * cannon_length
+       end_y = self.y + math.sin(self.angle) * cannon_length
+       pygame.draw.line(screen, (150,150,150), (self.x, self.y), (end_x, end_y), self.cannon_thickness)
        # Draw the tank body (circle)
        pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
 
 
-       # Draw the cannon to indicate direction (thicker line for cannon)
-       cannon_length = 50
-       end_x = self.x + math.cos(self.angle) * cannon_length
-       end_y = self.y + math.sin(self.angle) * cannon_length
-       pygame.draw.line(screen, BLACK, (self.x, self.y), (end_x, end_y), self.cannon_thickness)
-
-
    def update(self, keys_pressed):
-       # Update world coordinates based on movement
+       # Movement vector
+       move_x = 0
+       move_y = 0
+
+
+       # Update movement based on key presses
        if keys_pressed[pygame.K_w]:
-           self.world_y -= self.speed  # Move the world down (player goes up)
+           move_y = -1
        if keys_pressed[pygame.K_s]:
-           self.world_y += self.speed  # Move the world up (player goes down)
+           move_y = 1
        if keys_pressed[pygame.K_a]:
-           self.world_x -= self.speed  # Move the world right (player goes left)
+           move_x = -1
        if keys_pressed[pygame.K_d]:
-           self.world_x += self.speed  # Move the world left (player goes right)
+           move_x = 1
+
+
+       # Normalize movement to prevent diagonal speed boost
+       if move_x != 0 or move_y != 0:
+           magnitude = math.sqrt(move_x ** 2 + move_y ** 2)
+           move_x /= magnitude
+           move_y /= magnitude
+
+
+       # Update world coordinates
+       self.world_x += move_x * self.speed
+       self.world_y += move_y * self.speed
 
 
        # Clamp player's world position within world bounds (preventing from going off the edge)
@@ -82,10 +100,15 @@ class Tank:
 
 
    def rotate_to_mouse(self, mouse_pos):
-       # Calculate the angle to point towards the mouse
-       dx = mouse_pos[0] - self.x
-       dy = mouse_pos[1] - self.y
-       self.angle = math.atan2(dy, dx)
+       # Check if autospin is active
+       if self.autospin:
+           # Slowly rotate clockwise
+           self.angle += 0.05  # Adjust the speed of the spin as desired
+       else:
+           # Calculate the angle to point towards the mouse
+           dx = mouse_pos[0] - self.x
+           dy = mouse_pos[1] - self.y
+           self.angle = math.atan2(dy, dx)
 
 
    def shoot(self):
@@ -106,43 +129,73 @@ class Tank:
 
 # Bullet class with lifespan
 class Bullet:
-   def __init__(self, x, y, vel_x, vel_y):
-       self.world_x = x
-       self.world_y = y
-       self.vel_x = vel_x
-       self.vel_y = vel_y
-       self.radius = 10  # Larger bullet radius like in Diep.io
-       self.color = RED
-       self.lifespan = 120  # Bullet will last for 2 seconds (120 frames at 60 FPS)
+  def __init__(self, x, y, vel_x, vel_y):
+      self.world_x = x
+      self.world_y = y
+      self.vel_x = vel_x
+      self.vel_y = vel_y
+      self.radius = 10  # Larger bullet radius like in Diep.io
+      self.color = RED
+      self.lifespan = 120  # Bullet will last for 2 seconds (120 frames at 60 FPS)
 
 
-   def update(self):
-       # Move the bullet in world coordinates
-       self.world_x += self.vel_x
-       self.world_y += self.vel_y
 
 
-       # Decrease lifespan over time
-       self.lifespan -= 1
+  def update(self):
+      # Move the bullet in world coordinates
+      self.world_x += self.vel_x
+      self.world_y += self.vel_y
 
 
-       # Prevent the bullet from going beyond the world bounds
-       if self.world_x - self.radius < 0 or self.world_x + self.radius > WORLD_WIDTH:
-           self.vel_x = 0  # Stop the bullet if it hits the world border
-       if self.world_y - self.radius < 0 or self.world_y + self.radius > WORLD_HEIGHT:
-           self.vel_y = 0
 
 
-   def draw(self, tank):
-       # Draw the bullet relative to the player's screen position
-       screen_x = self.world_x - tank.world_x + tank.x
-       screen_y = self.world_y - tank.world_y + tank.y
-       pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.radius)
+      # Decrease lifespan over time
+      self.lifespan -= 1
 
 
-   def off_screen(self):
-       # Check if the bullet is outside the world bounds or if its lifespan is over
-       return self.world_x < 0 or self.world_x > WORLD_WIDTH or self.world_y < 0 or self.world_y > WORLD_HEIGHT or self.lifespan <= 0
+
+
+      # Prevent the bullet from going beyond the world bounds
+      if self.world_x - self.radius < 0 or self.world_x + self.radius > WORLD_WIDTH:
+          self.vel_x = 0  # Stop the bullet if it hits the world border
+      if self.world_y - self.radius < 0 or self.world_y + self.radius > WORLD_HEIGHT:
+          self.vel_y = 0
+
+
+
+
+  def draw(self, tank):
+      # Draw the bullet relative to the player's screen position
+      screen_x = self.world_x - tank.world_x + tank.x
+      screen_y = self.world_y - tank.world_y + tank.y
+      pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.radius)
+
+
+
+
+  def off_screen(self):
+      # Check if the bullet is outside the world bounds or if its lifespan is over
+      return self.world_x < 0 or self.world_x > WORLD_WIDTH or self.world_y < 0 or self.world_y > WORLD_HEIGHT or self.lifespan <= 0
+
+
+# Draw the autofire indicator
+def draw_autofire_indicator(tank):
+   # Display autofire state at the top left of the screen
+   font = pygame.font.SysFont(None, 24)
+   autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
+   autofire_color = GREEN if tank.autofire else RED
+   text_surface = font.render(autofire_text, True, autofire_color)
+   screen.blit(text_surface, (10, 10))
+
+
+# Draw the autospin indicator
+def draw_autospin_indicator(tank):
+   # Display autospin state at the top left of the screen, below autofire
+   font = pygame.font.SysFont(None, 24)
+   autospin_text = "Autospin: ON" if tank.autospin else "Autospin: OFF"
+   autospin_color = GREEN if tank.autospin else RED
+   text_surface = font.render(autospin_text, True, autospin_color)
+   screen.blit(text_surface, (10, 40))  # Display below the autofire indicator
 
 
 # Draw the grid-based terrain
@@ -168,40 +221,23 @@ def draw_grid(tank):
            pygame.draw.rect(screen, GRAY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
 
 
-# Draw the world border by filling the area outside the world with gray
+# Draw the world border
 def draw_world_border(tank):
    # Calculate the player's visible position in the world relative to the screen
    screen_x = tank.x - tank.world_x
    screen_y = tank.y - tank.world_y
 
 
-   # Define the area that represents the world in screen coordinates
-   world_rect = pygame.Rect(screen_x, screen_y, WORLD_WIDTH, WORLD_HEIGHT)
+   # Define the border rectangle coordinates in world space
+   border_rect = pygame.Rect(screen_x, screen_y, WORLD_WIDTH, WORLD_HEIGHT)
 
 
-   # Fill gray areas outside the world bounds
-   # Top gray area (above the world)
-   if screen_y > 0:
-       pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, screen_y))
-   # Bottom gray area (below the world)
-   if screen_y + WORLD_HEIGHT < SCREEN_HEIGHT:
-       pygame.draw.rect(screen, GRAY, (0, screen_y + WORLD_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - (screen_y + WORLD_HEIGHT)))
-   # Left gray area (left of the world)
-   if screen_x > 0:
-       pygame.draw.rect(screen, GRAY, (0, 0, screen_x, SCREEN_HEIGHT))
-   # Right gray area (right of the world)
-   if screen_x + WORLD_WIDTH < SCREEN_WIDTH:
-       pygame.draw.rect(screen, GRAY, (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
+   # Draw the border rectangle (only visible as the player nears the edges)
+   pygame.draw.rect(screen, BORDER_COLOR, border_rect, 5)  # Border thickness set to 5 pixels
 
 
-# Draw the autofire indicator
-def draw_autofire_indicator(tank):
-   # Display autofire state at the top left of the screen
-   font = pygame.font.SysFont(None, 24)
-   autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
-   autofire_color = GREEN if tank.autofire else RED
-   text_surface = font.render(autofire_text, True, autofire_color)
-   screen.blit(text_surface, (10, 10))
+
+
 
 
 # Main loop
@@ -223,6 +259,8 @@ def game_loop():
            elif event.type == pygame.KEYDOWN:
                if event.key == pygame.K_e:  # Toggle autofire on 'E' key press
                    tank.autofire = not tank.autofire
+               if event.key == pygame.K_c:  # Toggle autospin on 'C' key press
+                   tank.autospin = not tank.autospin
 
 
        # Get pressed keys
@@ -246,7 +284,7 @@ def game_loop():
        draw_grid(tank)
 
 
-       # Draw the world border (with gray outside)
+       # Draw the world border (before bullets, so bullets are on top)
        draw_world_border(tank)
 
 
@@ -265,8 +303,9 @@ def game_loop():
        tank.draw()
 
 
-       # Draw the autofire indicator
+       # Draw the autofire and autospin indicators
        draw_autofire_indicator(tank)
+       draw_autospin_indicator(tank)
 
 
        # Update the screen
@@ -276,13 +315,8 @@ def game_loop():
        # Limit the frame rate
        clock.tick(60)
 
-
 # Start the game
 game_loop()
 
-
 # Quit pygame
 pygame.quit()
-
-
-
