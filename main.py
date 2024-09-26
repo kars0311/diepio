@@ -459,7 +459,7 @@ for i in range(0,40):
 def game_loop():
     tank = Tank()
     running = True
-    minimap_visible = True  # Track minimap visibility
+    minimap_visible = False  # Track minimap visibility
 
     while running:
         screen.fill(WHITE)
