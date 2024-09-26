@@ -185,8 +185,8 @@ class Tank:
 
    def shoot(self):
        # Calculate the position at the tip of the cannon
-       bullet_x = self.world_x + math.cos(self.angle) * (self.cannon_length + self.size)
-       bullet_y = self.world_y + math.sin(self.angle) * (self.cannon_length + self.size)
+       bullet_x = self.world_x + math.cos(self.angle) * (self.cannon_length/3 + self.size)
+       bullet_y = self.world_y + math.sin(self.angle) * (self.cannon_length/3 + self.size)
 
 
        # Create a new bullet and add it to the list
@@ -450,11 +450,72 @@ def draw_minimap_indicator(minimap_visible):
     # Draw the text indicator on the screen
     screen.blit(text_surface, (indicator_x, indicator_y))
 
+class Crasher:
+    def __init__(self, x, y):
+        self.world_x = x
+        self.world_y = y
+        self.size = 30
+        self.color = (255, 105, 180)  # Pink color
+        self.health = 50
+        self.max_health = 50
+        self.alive = True
+        self.speed = 2  # Speed at which the crasher chases the player
+
+    def draw(self, tank):
+        if not self.alive:
+            return
+
+        screen_x = self.world_x - tank.world_x + tank.x
+        screen_y = self.world_y - tank.world_y + tank.y
+
+        # Draw the crasher as a pink triangle
+        points = [
+            (screen_x, screen_y - self.size // 2),
+            (screen_x - self.size // 2, screen_y + self.size // 2),
+            (screen_x + self.size // 2, screen_y + self.size // 2)
+        ]
+        pygame.draw.polygon(screen, self.color, points)
+
+        # Draw health bar
+        health_bar_width = self.size
+        health_bar_height = 5
+        health_percentage = self.health / self.max_health
+        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+        pygame.draw.rect(screen, health_bar_color, (
+            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10),
+            int(health_bar_width * health_percentage), health_bar_height))
+        pygame.draw.rect(screen, BLACK, (
+            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width,
+            health_bar_height), 1)
+
+    def update(self, tank):
+        if not self.alive:
+            return
+
+        # Move towards the player
+        dx = tank.world_x - self.world_x
+        dy = tank.world_y - self.world_y
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        if distance > 0:
+            dx /= distance
+            dy /= distance
+
+        self.world_x += dx * self.speed
+        self.world_y += dy * self.speed
+
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health <= 0:
+            self.alive = False
+
 
 for i in range(0,40):
     shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"square"))
     shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"triangle"))
     shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"pentagon"))
+
+
 
 def game_loop():
     tank = Tank()
