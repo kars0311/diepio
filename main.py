@@ -15,6 +15,15 @@ TILE_SIZE = 50  # Each tile is a 50x50 pixel square
 WORLD_WIDTH = 5000
 WORLD_HEIGHT = 5000
 
+# Minimap visibility
+minimap_visible = True  # Start with the minimap visible by default
+
+# Minimap dimensions
+MINIMAP_WIDTH = 200
+MINIMAP_HEIGHT = 200
+MINIMAP_SCALE = MINIMAP_WIDTH / WORLD_WIDTH
+
+
 # Colors
 WHITE = (255, 255, 255)
 BLUE = (0, 0, 255)
@@ -389,74 +398,128 @@ def draw_world_border(tank):
 # Initialize a list of shapes in the game
 shapes = [
 ]
+
+
+def draw_minimap(tank, shapes):
+    # Define the position of the minimap on the screen (bottom right)
+    minimap_x = SCREEN_WIDTH - MINIMAP_WIDTH - 10  # 10px margin from right edge
+    minimap_y = SCREEN_HEIGHT - MINIMAP_HEIGHT - 10  # 10px margin from bottom edge
+
+    # Draw the minimap background
+    pygame.draw.rect(screen, BLACK, (minimap_x, minimap_y, MINIMAP_WIDTH, MINIMAP_HEIGHT))
+    pygame.draw.rect(screen, WHITE, (minimap_x, minimap_y, MINIMAP_WIDTH, MINIMAP_HEIGHT), 2)
+
+    # Draw the player as a small dot on the minimap
+    player_minimap_x = minimap_x + int(tank.world_x * MINIMAP_SCALE)
+    player_minimap_y = minimap_y + int(tank.world_y * MINIMAP_SCALE)
+    pygame.draw.circle(screen, BLUE, (player_minimap_x, player_minimap_y), 5)  # Player dot
+
+    # Draw the shapes on the minimap
+    for shape in shapes:
+        if shape.alive:
+            shape_minimap_x = minimap_x + int(shape.world_x * MINIMAP_SCALE)
+            shape_minimap_y = minimap_y + int(shape.world_y * MINIMAP_SCALE)
+
+            # Use smaller sizes on the minimap for shapes
+            if shape.shape_type == "square":
+                pygame.draw.rect(screen, shape.color,
+                                 (shape_minimap_x - 2, shape_minimap_y - 2, 4, 4))  # Small square
+            elif shape.shape_type == "triangle":
+                pygame.draw.polygon(screen, shape.color,
+                                    [(shape_minimap_x, shape_minimap_y - 3),
+                                     (shape_minimap_x - 3, shape_minimap_y + 3),
+                                     (shape_minimap_x + 3, shape_minimap_y + 3)])  # Small triangle
+            elif shape.shape_type == "pentagon":
+                pygame.draw.circle(screen, shape.color, (shape_minimap_x, shape_minimap_y), 3)  # Small circle
+
+def draw_minimap_indicator(minimap_visible):
+    font = pygame.font.SysFont(None, 24)
+    indicator_text = "Minimap: ON" if minimap_visible else "Minimap: OFF"
+    text_surface = font.render(indicator_text, True, BLACK)
+
+    # Position of the indicator (bottom-right corner or above minimap)
+    if minimap_visible:
+        # Place the indicator slightly above the minimap
+        indicator_x = SCREEN_WIDTH - 120  # Slightly offset from the minimap
+        indicator_y = SCREEN_HEIGHT - 230  # Above the minimap
+    else:
+        # Place the indicator in the bottom-right corner when minimap is off
+        indicator_x = SCREEN_WIDTH - 120
+        indicator_y = SCREEN_HEIGHT - 20
+
+    # Draw the text indicator on the screen
+    screen.blit(text_surface, (indicator_x, indicator_y))
+
+
 for i in range(0,40):
     shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"square"))
     shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"triangle"))
     shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"pentagon"))
 
 def game_loop():
-   tank = Tank()
-   running = True
-   while running:
-       screen.fill(WHITE)
+    tank = Tank()
+    running = True
+    minimap_visible = True  # Track minimap visibility
 
+    while running:
+        screen.fill(WHITE)
 
-       # Event handling
-       for event in pygame.event.get():
-           if event.type == pygame.QUIT:
-               running = False
-           elif event.type == pygame.MOUSEBUTTONDOWN:
-               tank.shoot()
-           elif event.type == pygame.KEYDOWN:
-               if event.key == pygame.K_e:
-                   tank.autofire = not tank.autofire
-               if event.key == pygame.K_c:
-                   tank.autospin = not tank.autospin
+        # Event handling
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                tank.shoot()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_e:
+                    tank.autofire = not tank.autofire
+                if event.key == pygame.K_c:
+                    tank.autospin = not tank.autospin
+                if event.key == pygame.K_TAB:  # Toggle minimap with Tab
+                    minimap_visible = not minimap_visible
 
+        keys_pressed = pygame.key.get_pressed()
+        tank.update(keys_pressed)
+        tank.handle_autofire()
+        mouse_pos = pygame.mouse.get_pos()
+        tank.rotate_to_mouse(mouse_pos)
 
-       keys_pressed = pygame.key.get_pressed()
-       tank.update(keys_pressed)
-       tank.handle_autofire()
-       mouse_pos = pygame.mouse.get_pos()
-       tank.rotate_to_mouse(mouse_pos)
+        # Check for collisions between tank and shapes
+        tank.check_collision_with_shapes(shapes)
 
+        # Draw the grid and world border
+        draw_grid(tank)
+        draw_world_border(tank)
 
-       # Check for collisions between tank and shapes
-       tank.check_collision_with_shapes(shapes)
+        # Update and draw shapes
+        for shape in shapes:
+            shape.draw(tank)
 
+        # Update and draw bullets
+        for bullet in tank.bullets[:]:
+            bullet.update()
+            if bullet.check_collision(shapes):
+                tank.bullets.remove(bullet)
+            bullet.draw(tank)
+            if bullet.off_screen():
+                tank.bullets.remove(bullet)
 
-       # Draw the grid and world border
-       draw_grid(tank)
-       draw_world_border(tank)
+        # Draw the tank
+        tank.draw()
 
+        # Draw the minimap if it's visible
+        if minimap_visible:
+            draw_minimap(tank, shapes)
 
-       # Update and draw shapes
-       for shape in shapes:
-           shape.draw(tank)
+        # Draw the minimap indicator
+        draw_minimap_indicator(minimap_visible)
 
+        # Draw the autofire and autospin indicators
+        draw_autofire_indicator(tank)
+        draw_autospin_indicator(tank)
 
-       # Update and draw bullets
-       for bullet in tank.bullets[:]:
-           bullet.update()
-           if bullet.check_collision(shapes):
-               tank.bullets.remove(bullet)
-           bullet.draw(tank)
-           if bullet.off_screen():
-               tank.bullets.remove(bullet)
-
-
-       # Draw the tank
-       tank.draw()
-
-
-       # Draw the autofire and autospin indicators
-       draw_autofire_indicator(tank)
-       draw_autospin_indicator(tank)
-
-
-       pygame.display.flip()
-       clock.tick(60)
-
+        pygame.display.flip()
+        clock.tick(60)
 
 # Start the game
 game_loop()
@@ -464,6 +527,3 @@ game_loop()
 
 # Quit pygame
 pygame.quit()
-
-
-
