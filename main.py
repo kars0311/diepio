@@ -58,6 +58,7 @@ class Tank:
        self.recoil_velocity_x = 0  # Recoil velocity in x direction
        self.recoil_velocity_y = 0  # Recoil velocity in y direction
        self.recoil_dampening = 0.95  # Dampening factor for recoil
+       self.max_recoil_speed = 2  # Maximum recoil speed
 
 
    def draw(self):
@@ -133,6 +134,14 @@ class Tank:
        self.recoil_velocity_y *= self.recoil_dampening
 
 
+       # Ensure recoil doesn't exceed maximum speed
+       recoil_speed = math.sqrt(self.recoil_velocity_x ** 2 + self.recoil_velocity_y ** 2)
+       if recoil_speed > self.max_recoil_speed:
+           factor = self.max_recoil_speed / recoil_speed
+           self.recoil_velocity_x *= factor
+           self.recoil_velocity_y *= factor
+
+
    def rotate_to_mouse(self, mouse_pos):
        # Check if autospin is active
        if self.autospin:
@@ -157,8 +166,8 @@ class Tank:
        self.bullets.append(bullet)
 
 
-       # Apply recoil
-       recoil_force = 0.5  # Adjust this value to change the strength of the recoil
+       # Apply recoil as a boost
+       recoil_force = 0.2  # Reduced recoil force
        self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
        self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
 
@@ -320,12 +329,12 @@ def game_loop():
        clock.tick(60)
 
 
-
-
 # Start the game
 game_loop()
 
 
 # Quit pygame
 pygame.quit()
+
+
 
