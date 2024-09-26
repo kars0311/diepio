@@ -54,7 +54,10 @@ class Tank:
        self.autospin = False  # Autospin state
        self.shoot_cooldown = 0  # Cooldown timer for autofire
        self.cannon_length = 75
-       self.cannon_thickness = 35  # Thicker cannon like a Diep.io tank
+       self.cannon_thickness = 35  # Updated cannon thickness
+       self.recoil_velocity_x = 0  # Recoil velocity in x direction
+       self.recoil_velocity_y = 0  # Recoil velocity in y direction
+       self.recoil_dampening = 0.95  # Dampening factor for recoil
 
 
    def draw(self):
@@ -110,6 +113,11 @@ class Tank:
            move_y /= magnitude
 
 
+       # Apply recoil
+       move_x += self.recoil_velocity_x
+       move_y += self.recoil_velocity_y
+
+
        # Update world coordinates
        self.world_x += move_x * self.speed
        self.world_y += move_y * self.speed
@@ -118,6 +126,11 @@ class Tank:
        # Clamp player's world position within world bounds (preventing from going off the edge)
        self.world_x = max(self.size, min(WORLD_WIDTH - self.size, self.world_x))
        self.world_y = max(self.size, min(WORLD_HEIGHT - self.size, self.world_y))
+
+
+       # Apply dampening to recoil
+       self.recoil_velocity_x *= self.recoil_dampening
+       self.recoil_velocity_y *= self.recoil_dampening
 
 
    def rotate_to_mouse(self, mouse_pos):
@@ -142,6 +155,12 @@ class Tank:
        bullet_speed = 10
        bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed)
        self.bullets.append(bullet)
+
+
+       # Apply recoil
+       recoil_force = 0.5  # Adjust this value to change the strength of the recoil
+       self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
+       self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
 
 
    def handle_autofire(self):
