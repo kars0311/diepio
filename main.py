@@ -1,10 +1,9 @@
 import pygame
 import math
-
+import random
 
 # Initialize pygame
 pygame.init()
-
 
 # Screen dimensions
 SCREEN_WIDTH = 800
@@ -16,7 +15,6 @@ TILE_SIZE = 50  # Each tile is a 50x50 pixel square
 WORLD_WIDTH = 5000
 WORLD_HEIGHT = 5000
 
-
 # Colors
 WHITE = (255, 255, 255)
 BLUE = (0, 0, 255)
@@ -24,6 +22,7 @@ BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
+YELLOW = (255,255,0)
 BORDER_COLOR = (255, 0, 0)  # Red for the world border
 
 
@@ -35,9 +34,6 @@ pygame.display.set_caption("Diep.io Terrain Generation")
 # Clock object to control game speed
 clock = pygame.time.Clock()
 
-
-
-
 # Tank class
 class Tank:
    def __init__(self):
@@ -47,18 +43,23 @@ class Tank:
        self.speed = 5
        self.angle = 0
        self.color = BLUE
-       self.world_x = WORLD_WIDTH // 2  # Player's position in the world coordinates
-       self.world_y = WORLD_HEIGHT // 2  # Start tank in the middle of the world
-       self.bullets = []  # List to hold bullets
-       self.autofire = False  # Autofire state
-       self.autospin = False  # Autospin state
-       self.shoot_cooldown = 0  # Cooldown timer for autofire
+       self.world_x = WORLD_WIDTH // 2
+       self.world_y = WORLD_HEIGHT // 2
+       self.bullets = []
+       self.autofire = False
+       self.autospin = False
+       self.shoot_cooldown = 0
        self.cannon_length = 75
-       self.cannon_thickness = 35  # Updated cannon thickness
-       self.recoil_velocity_x = 0  # Recoil velocity in x direction
-       self.recoil_velocity_y = 0  # Recoil velocity in y direction
-       self.recoil_dampening = 0.95  # Dampening factor for recoil
-       self.max_recoil_speed = 2  # Maximum recoil speed
+       self.cannon_thickness = 35
+       self.recoil_velocity_x = 0
+       self.recoil_velocity_y = 0
+       self.recoil_dampening = 0.45
+       self.max_recoil_speed = 2
+       self.health = 500  # New: Player health
+       self.max_health = 500  # New: Maximum player health
+
+
+   # ... (other methods remain the same)
 
 
    def draw(self):
@@ -88,6 +89,25 @@ class Tank:
 
        # Draw the tank body (circle)
        pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
+
+
+       # Draw health bar
+       health_bar_width = self.size * 2
+       health_bar_height = 5
+       health_percentage = self.health / self.max_health
+       health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+       pygame.draw.rect(screen, health_bar_color, (
+           int(self.x - health_bar_width // 2),
+           int(self.y - self.size - 15),
+           int(health_bar_width * health_percentage),
+           health_bar_height
+       ))
+       pygame.draw.rect(screen, BLACK, (
+           int(self.x - health_bar_width // 2),
+           int(self.y - self.size - 15),
+           health_bar_width,
+           health_bar_height
+       ), 1)
 
 
    def update(self, keys_pressed):
@@ -181,151 +201,260 @@ class Tank:
            self.shoot_cooldown -= 1
 
 
+   def take_damage(self, damage):
+       self.health -= damage
+       if self.health <= 0:
+           self.health = 0
+           print("Game Over!")  # You can implement a proper game over screen here
 
+
+   def check_collision_with_shapes(self, shapes):
+       for shape in shapes:
+           if shape.alive:
+               distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+               if distance < self.size + shape.size // 2:
+                   damage_to_player = 5  # Adjust this value to change damage dealt to player
+                   damage_to_shape = 10  # Adjust this value to change damage dealt to shape
+                   self.take_damage(damage_to_player)
+                   shape.take_damage(damage_to_shape)
+
+
+                   # Push the tank away from the shape
+                   angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                   push_distance = (self.size + shape.size // 2) - distance
+                   self.world_x += math.cos(angle) * push_distance
+                   self.world_y += math.sin(angle) * push_distance
 
 # Bullet class with lifespan
 class Bullet:
-   def __init__(self, x, y, vel_x, vel_y):
-       self.world_x = x
-       self.world_y = y
-       self.vel_x = vel_x
-       self.vel_y = vel_y
-       self.radius = 10  # Larger bullet radius like in Diep.io
-       self.color = RED
-       self.lifespan = 120  # Bullet will last for 2 seconds (120 frames at 60 FPS)
+  def __init__(self, x, y, vel_x, vel_y):
+      self.world_x = x
+      self.world_y = y
+      self.vel_x = vel_x
+      self.vel_y = vel_y
+      self.radius = 15
+      self.color = BLUE
+      self.lifespan = 120
+      self.damage = 60  # Damage dealt by the bullet
+
+  def update(self):
+      self.world_x += self.vel_x
+      self.world_y += self.vel_y
+      self.lifespan -= 1
+      if self.world_x - self.radius < 0 or self.world_x + self.radius > WORLD_WIDTH:
+          self.vel_x = 0
+      if self.world_y - self.radius < 0 or self.world_y + self.radius > WORLD_HEIGHT:
+          self.vel_y = 0
+
+  def draw(self, tank):
+      screen_x = self.world_x - tank.world_x + tank.x
+      screen_y = self.world_y - tank.world_y + tank.y
+      pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.radius)
 
 
-   def update(self):
-       # Move the bullet in world coordinates
-       self.world_x += self.vel_x
-       self.world_y += self.vel_y
-       # Decrease lifespan over time
-       self.lifespan -= 1
-       # Prevent the bullet from going beyond the world bounds
-       if self.world_x - self.radius < 0 or self.world_x + self.radius > WORLD_WIDTH:
-           self.vel_x = 0  # Stop the bullet if it hits the world border
-       if self.world_y - self.radius < 0 or self.world_y + self.radius > WORLD_HEIGHT:
-           self.vel_y = 0
+  def off_screen(self):
+      return self.world_x < 0 or self.world_x > WORLD_WIDTH or self.world_y < 0 or self.world_y > WORLD_HEIGHT or self.lifespan <= 0
 
 
-   def draw(self, tank):
-       # Draw the bullet relative to the player's screen position
-       screen_x = self.world_x - tank.world_x + tank.x
-       screen_y = self.world_y - tank.world_y + tank.y
-       pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.radius)
+  def check_collision(self, shapes):
+      for shape in shapes:
+          if shape.alive:  # Only check collision with alive shapes
+              distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+              if distance < self.radius + shape.size // 2:
+                  shape.take_damage(self.damage)
+                  return True
+      return False
 
 
-   def off_screen(self):
-       # Check if the bullet is outside the world bounds or if its lifespan is over
-       return self.world_x < 0 or self.world_x > WORLD_WIDTH or self.world_y < 0 or self.world_y > WORLD_HEIGHT or self.lifespan <= 0
+class Shape:
+    def __init__(self, x, y, shape_type):
+        self.world_x = x
+        self.world_y = y
+        self.shape_type = shape_type
 
+        if shape_type == "square":
+            self.size = 40
+            self.health = 100
+            self.max_health = 100
+            self.color = YELLOW
+        elif shape_type == "triangle":
+            self.size = 60
+            self.health = 200
+            self.max_health = 200
+            self.color = RED
+        elif shape_type == "pentagon":
+            self.size = 80
+            self.health = 800
+            self.max_health = 800
+            self.color = BLUE
 
+        self.alive = True
+
+    def draw(self, tank):
+        if not self.alive:
+            return
+
+        screen_x = self.world_x - tank.world_x + tank.x
+        screen_y = self.world_y - tank.world_y + tank.y
+
+        # Draw shapes based on their type
+        if self.shape_type == "square":
+            pygame.draw.rect(screen, self.color,
+                             (screen_x - self.size // 2, screen_y - self.size // 2, self.size, self.size))
+        elif self.shape_type == "triangle":
+            points = [(screen_x, screen_y - self.size // 2),
+                      (screen_x - self.size // 2, screen_y + self.size // 2),
+                      (screen_x + self.size // 2, screen_y + self.size // 2)]
+            pygame.draw.polygon(screen, self.color, points)
+        elif self.shape_type == "pentagon":
+            pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.size // 2)
+
+        # Draw health bar
+        health_bar_width = self.size
+        health_bar_height = 5
+        health_percentage = self.health / self.max_health
+        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+        pygame.draw.rect(screen, health_bar_color, (
+            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10),
+            int(health_bar_width * health_percentage), health_bar_height))
+        pygame.draw.rect(screen, BLACK, (
+            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width,
+            health_bar_height), 1)
+
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health <= 0:
+            self.regenerate()
+
+    def regenerate(self):
+        # Move the shape to a new random location in the world
+        self.world_x = random.randint(100, WORLD_WIDTH - 100)
+        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+
+        # Reset health
+        self.health = self.max_health
+
+        # Mark the shape as alive
+        self.alive = True
 
 
 # Draw the autofire indicator
 def draw_autofire_indicator(tank):
-   font = pygame.font.SysFont(None, 24)
-   autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
-   autofire_color = GREEN if tank.autofire else RED
-   text_surface = font.render(autofire_text, True, autofire_color)
-   screen.blit(text_surface, (10, 10))
-
-
-
+ font = pygame.font.SysFont(None, 24)
+ autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
+ autofire_color = GREEN if tank.autofire else RED
+ text_surface = font.render(autofire_text, True, autofire_color)
+ screen.blit(text_surface, (10, 10))
 
 # Draw the autospin indicator
 def draw_autospin_indicator(tank):
-   font = pygame.font.SysFont(None, 24)
-   autospin_text = "Autospin: ON" if tank.autospin else "Autospin: OFF"
-   autospin_color = GREEN if tank.autospin else RED
-   text_surface = font.render(autospin_text, True, autospin_color)
-   screen.blit(text_surface, (10, 40))  # Display below the autofire indicator
-
-
-
+ font = pygame.font.SysFont(None, 24)
+ autospin_text = "Autospin: ON" if tank.autospin else "Autospin: OFF"
+ autospin_color = GREEN if tank.autospin else RED
+ text_surface = font.render(autospin_text, True, autospin_color)
+ screen.blit(text_surface, (10, 40))  # Display below the autofire indicator
 
 # Draw the grid-based terrain
 def draw_grid(tank):
-   cols = SCREEN_WIDTH // TILE_SIZE + 2  # Number of tiles needed to fill the width
-   rows = SCREEN_HEIGHT // TILE_SIZE + 2  # Number of tiles needed to fill the height
-   # Calculate the offset based on the player's world position
-   offset_x = tank.world_x % TILE_SIZE
-   offset_y = tank.world_y % TILE_SIZE
-   # Loop through rows and columns and draw tiles
-   for row in range(rows):
-       for col in range(cols):
-           # Calculate tile position in world coordinates
-           tile_x = col * TILE_SIZE - offset_x
-           tile_y = row * TILE_SIZE - offset_y
-           # Draw the grid tile
-           pygame.draw.rect(screen, GRAY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
-
-
-
+ cols = SCREEN_WIDTH // TILE_SIZE + 2  # Number of tiles needed to fill the width
+ rows = SCREEN_HEIGHT // TILE_SIZE + 2  # Number of tiles needed to fill the height
+ # Calculate the offset based on the player's world position
+ offset_x = tank.world_x % TILE_SIZE
+ offset_y = tank.world_y % TILE_SIZE
+ # Loop through rows and columns and draw tiles
+ for row in range(rows):
+     for col in range(cols):
+         # Calculate tile position in world coordinates
+         tile_x = col * TILE_SIZE - offset_x
+         tile_y = row * TILE_SIZE - offset_y
+         # Draw the grid tile
+         pygame.draw.rect(screen, GRAY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
 
 # Draw the world border
 def draw_world_border(tank):
-   screen_x = tank.x - tank.world_x
-   screen_y = tank.y - tank.world_y
-   world_rect = pygame.Rect(screen_x, screen_y, WORLD_WIDTH, WORLD_HEIGHT)
-   if screen_y > 0:
-       pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, screen_y))
-   if screen_y + WORLD_HEIGHT < SCREEN_HEIGHT:
-       pygame.draw.rect(screen, GRAY,
-                        (0, screen_y + WORLD_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - (screen_y + WORLD_HEIGHT)))
-   if screen_x > 0:
-       pygame.draw.rect(screen, GRAY, (0, 0, screen_x, SCREEN_HEIGHT))
-   if screen_x + WORLD_WIDTH < SCREEN_WIDTH:
-       pygame.draw.rect(screen, GRAY,
-                        (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
+ screen_x = tank.x - tank.world_x
+ screen_y = tank.y - tank.world_y
+ world_rect = pygame.Rect(screen_x, screen_y, WORLD_WIDTH, WORLD_HEIGHT)
+ if screen_y > 0:
+     pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, screen_y))
+ if screen_y + WORLD_HEIGHT < SCREEN_HEIGHT:
+     pygame.draw.rect(screen, GRAY,
+                      (0, screen_y + WORLD_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - (screen_y + WORLD_HEIGHT)))
+ if screen_x > 0:
+     pygame.draw.rect(screen, GRAY, (0, 0, screen_x, SCREEN_HEIGHT))
+ if screen_x + WORLD_WIDTH < SCREEN_WIDTH:
+     pygame.draw.rect(screen, GRAY,
+                      (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
 
+# Initialize a list of shapes in the game
+shapes = [
+]
+for i in range(0,40):
+    shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"square"))
+    shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"triangle"))
+    shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"pentagon"))
 
-
-
-# Main loop
 def game_loop():
    tank = Tank()
    running = True
    while running:
        screen.fill(WHITE)
+
+
        # Event handling
        for event in pygame.event.get():
            if event.type == pygame.QUIT:
                running = False
-           elif event.type == pygame.MOUSEBUTTONDOWN:  # Shoot when mouse button is pressed
+           elif event.type == pygame.MOUSEBUTTONDOWN:
                tank.shoot()
            elif event.type == pygame.KEYDOWN:
-               if event.key == pygame.K_e:  # Toggle autofire on 'E' key press
+               if event.key == pygame.K_e:
                    tank.autofire = not tank.autofire
-               if event.key == pygame.K_c:  # Toggle autospin on 'C' key press
+               if event.key == pygame.K_c:
                    tank.autospin = not tank.autospin
-       # Get pressed keys
+
+
        keys_pressed = pygame.key.get_pressed()
-       # Update tank movement (world coordinates change)
        tank.update(keys_pressed)
-       # Handle autofire shooting
        tank.handle_autofire()
-       # Get mouse position and rotate the tank to face the cursor
        mouse_pos = pygame.mouse.get_pos()
        tank.rotate_to_mouse(mouse_pos)
-       # Draw the grid-based terrain
+
+
+       # Check for collisions between tank and shapes
+       tank.check_collision_with_shapes(shapes)
+
+
+       # Draw the grid and world border
        draw_grid(tank)
-       # Draw the world border (before bullets, so bullets are on top)
        draw_world_border(tank)
-       # Update and draw all bullets
+
+
+       # Update and draw shapes
+       for shape in shapes:
+           shape.draw(tank)
+
+
+       # Update and draw bullets
        for bullet in tank.bullets[:]:
            bullet.update()
+           if bullet.check_collision(shapes):
+               tank.bullets.remove(bullet)
            bullet.draw(tank)
            if bullet.off_screen():
                tank.bullets.remove(bullet)
-       # Draw the tank in the center
+
+
+       # Draw the tank
        tank.draw()
+
+
        # Draw the autofire and autospin indicators
        draw_autofire_indicator(tank)
        draw_autospin_indicator(tank)
-       # Update the screen
+
+
        pygame.display.flip()
-       # Limit the frame rate
        clock.tick(60)
 
 
