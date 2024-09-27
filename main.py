@@ -1,19 +1,15 @@
 import pygame
 import math
 import random
+import time
 
 # Initialize pygame
 pygame.init()
 
-# Screen dimensions
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-TILE_SIZE = 50  # Each tile is a 50x50 pixel square
-
-
-# World dimensions
-WORLD_WIDTH = 5000
-WORLD_HEIGHT = 5000
+# Screen and world dimensions
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
+TILE_SIZE = 50
 
 # Minimap visibility
 minimap_visible = True  # Start with the minimap visible by default
@@ -23,9 +19,8 @@ MINIMAP_WIDTH = 200
 MINIMAP_HEIGHT = 200
 MINIMAP_SCALE = MINIMAP_WIDTH / WORLD_WIDTH
 
-
 # Colors
-AQUA = (100,200,255)
+AQUA = (63,180,223)
 DARK_GRAY = (170,170,170)
 WHITE = (255, 255, 255)
 BLUE = (0, 0, 255)
@@ -33,245 +28,206 @@ BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
-YELLOW = (255,255,0)
-BORDER_COLOR = (255, 0, 0)  # Red for the world border
-
+YELLOW = (255, 255, 0)
 
 # Create the screen object
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Diep.io Terrain Generation")
-
+pygame.display.set_caption("Diep.io")
 
 # Clock object to control game speed
 clock = pygame.time.Clock()
 
-# Tank class
 class Tank:
-   def __init__(self):
-       self.x = SCREEN_WIDTH // 2
-       self.y = SCREEN_HEIGHT // 2
-       self.size = 40  # Tank body size
-       self.speed = 5
-       self.angle = 0
-       self.color = AQUA
-       self.world_x = WORLD_WIDTH // 2
-       self.world_y = WORLD_HEIGHT // 2
-       self.bullets = []
-       self.autofire = False
-       self.autospin = False
-       self.shoot_cooldown = 0
-       self.cannon_length = 75
-       self.cannon_thickness = 35
-       self.recoil_velocity_x = 0
-       self.recoil_velocity_y = 0
-       self.recoil_dampening = 0.85
-       self.max_recoil_speed = 2
-       self.health = 500  # New: Player health
-       self.max_health = 500  # New: Maximum player health
+    def __init__(self):
+        self.x = SCREEN_WIDTH // 2
+        self.y = SCREEN_HEIGHT // 2
+        self.size = 40
+        self.speed = 5
+        self.angle = 0
+        self.color = AQUA
+        self.world_x = WORLD_WIDTH // 2
+        self.world_y = WORLD_HEIGHT // 2
+        self.bullets = []
+        self.autofire = False
+        self.autospin = False
+        self.shoot_cooldown = 0
+        self.cannon_length = 75
+        self.cannon_thickness = 35
+        self.recoil_velocity_x = 0
+        self.recoil_velocity_y = 0
+        self.recoil_dampening = 0.45
+        self.max_recoil_speed = 2
+        self.health = 500
+        self.max_health = 500
+        self.regen_rate = 0.1
+        self.regen_cooldown = 0
+        self.regen_cooldown_max = 180
 
+    def draw(self):
+        # Draw cannon
+        cannon_end_x = self.x + math.cos(self.angle) * self.cannon_length
+        cannon_end_y = self.y + math.sin(self.angle) * self.cannon_length
+        perpendicular_angle = self.angle + math.pi / 2
+        half_thickness = self.cannon_thickness / 2
+        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
+        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
+        cannon_corners = [
+            (self.x + corner_offset_x, self.y + corner_offset_y),
+            (self.x - corner_offset_x, self.y - corner_offset_y),
+            (cannon_end_x - corner_offset_x, cannon_end_y - corner_offset_y),
+            (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
+        ]
+        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
 
-   # ... (other methods remain the same)
+        # Draw tank body
+        pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
 
+        # Draw health bar
+        health_bar_width = self.size * 2
+        health_bar_height = 5
+        health_percentage = self.health / self.max_health
+        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+        pygame.draw.rect(screen, health_bar_color, (
+            int(self.x - health_bar_width // 2),
+            int(self.y - self.size - 15),
+            int(health_bar_width * health_percentage),
+            health_bar_height
+        ))
+        pygame.draw.rect(screen, BLACK, (
+            int(self.x - health_bar_width // 2),
+            int(self.y - self.size - 15),
+            health_bar_width,
+            health_bar_height
+        ), 1)
 
-   def draw(self):
-       # Calculate cannon end points
-       cannon_end_x = self.x + math.cos(self.angle) * self.cannon_length
-       cannon_end_y = self.y + math.sin(self.angle) * self.cannon_length
+    def update(self, keys_pressed):
+        move_x, move_y = 0, 0
+        if keys_pressed[pygame.K_w]: move_y = -1
+        if keys_pressed[pygame.K_s]: move_y = 1
+        if keys_pressed[pygame.K_a]: move_x = -1
+        if keys_pressed[pygame.K_d]: move_x = 1
 
+        # Normalize movement and apply recoil
+        if move_x != 0 or move_y != 0:
+            magnitude = math.sqrt(move_x ** 2 + move_y ** 2)
+            move_x, move_y = move_x / magnitude, move_y / magnitude
+        move_x += self.recoil_velocity_x
+        move_y += self.recoil_velocity_y
 
-       # Calculate cannon corners
-       perpendicular_angle = self.angle + math.pi / 2
-       half_thickness = self.cannon_thickness / 2
-       corner_offset_x = math.cos(perpendicular_angle) * half_thickness
-       corner_offset_y = math.sin(perpendicular_angle) * half_thickness
+        # Update world coordinates and clamp to world bounds
+        self.world_x = max(self.size, min(WORLD_WIDTH - self.size, self.world_x + move_x * self.speed))
+        self.world_y = max(self.size, min(WORLD_HEIGHT - self.size, self.world_y + move_y * self.speed))
 
+        # Apply dampening to recoil
+        self.recoil_velocity_x *= self.recoil_dampening
+        self.recoil_velocity_y *= self.recoil_dampening
 
-       cannon_corners = [
-           (self.x + corner_offset_x, self.y + corner_offset_y),
-           (self.x - corner_offset_x, self.y - corner_offset_y),
-           (cannon_end_x - corner_offset_x, cannon_end_y - corner_offset_y),
-           (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
-       ]
+        # Ensure recoil doesn't exceed maximum speed
+        recoil_speed = math.sqrt(self.recoil_velocity_x ** 2 + self.recoil_velocity_y ** 2)
+        if recoil_speed > self.max_recoil_speed:
+            factor = self.max_recoil_speed / recoil_speed
+            self.recoil_velocity_x *= factor
+            self.recoil_velocity_y *= factor
 
+        # Handle health regeneration
+        if self.health < self.max_health:
+            if self.regen_cooldown > 0:
+                self.regen_cooldown -= 1
+            else:
+                self.health = min(self.max_health, self.health + self.regen_rate)
 
-       # Draw the cannon as a polygon
-       pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+    def rotate_to_mouse(self, mouse_pos):
+        if self.autospin:
+            self.angle += 0.05
+        else:
+            dx, dy = mouse_pos[0] - self.x, mouse_pos[1] - self.y
+            self.angle = math.atan2(dy, dx)
 
+    def shoot(self):
+        if self.shoot_cooldown <= 0:
+            bullet_x = self.world_x + math.cos(self.angle) * self.size
+            bullet_y = self.world_y + math.sin(self.angle) * self.size
+            bullet_speed = 10
+            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed)
+            self.bullets.append(bullet)
 
-       # Draw the tank body (circle)
-       pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
+            # Apply recoil
+            recoil_force = 0.2
+            self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
+            self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
 
+            self.shoot_cooldown = 15
 
-       # Draw health bar
-       health_bar_width = self.size * 2
-       health_bar_height = 5
-       health_percentage = self.health / self.max_health
-       health_bar_color = RED if self.health < self.max_health / 2 else GREEN
-       pygame.draw.rect(screen, health_bar_color, (
-           int(self.x - health_bar_width // 2),
-           int(self.y - self.size - 15),
-           int(health_bar_width * health_percentage),
-           health_bar_height
-       ))
-       pygame.draw.rect(screen, BLACK, (
-           int(self.x - health_bar_width // 2),
-           int(self.y - self.size - 15),
-           health_bar_width,
-           health_bar_height
-       ), 1)
+    def handle_autofire(self):
+        if self.autofire and self.shoot_cooldown <= 0:
+            self.shoot()
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= 1
 
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health <= 0:
+            self.health = 0
+            global game_over
+            game_over = True
+        self.regen_cooldown = self.regen_cooldown_max
 
-   def update(self, keys_pressed):
-       # Movement vector
-       move_x = 0
-       move_y = 0
+    def check_collision_with_shapes(self, shapes):
+        for shape in shapes:
+            if shape.alive and shape.check_collision(self.world_x, self.world_y):
+                self.take_damage(5)
+                shape.take_damage(10)
+                angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                push_distance = self.size + shape.size // 2
+                self.world_x += math.cos(angle) * push_distance
+                self.world_y += math.sin(angle) * push_distance
 
+    def respawn(self):
+        self.health = self.max_health
+        self.world_x = random.randint(self.size, WORLD_WIDTH - self.size)
+        self.world_y = random.randint(self.size, WORLD_HEIGHT - self.size)
+        self.recoil_velocity_x = 0
+        self.recoil_velocity_y = 0
+        self.shoot_cooldown = 0
+        self.regen_cooldown = 0
 
-       # Update movement based on key presses
-       if keys_pressed[pygame.K_w]:
-           move_y = -1
-       if keys_pressed[pygame.K_s]:
-           move_y = 1
-       if keys_pressed[pygame.K_a]:
-           move_x = -1
-       if keys_pressed[pygame.K_d]:
-           move_x = 1
-
-
-       # Normalize movement to prevent diagonal speed boost
-       if move_x != 0 or move_y != 0:
-           magnitude = math.sqrt(move_x ** 2 + move_y ** 2)
-           move_x /= magnitude
-           move_y /= magnitude
-
-
-       # Apply recoil
-       move_x += self.recoil_velocity_x
-       move_y += self.recoil_velocity_y
-
-
-       # Update world coordinates
-       self.world_x += move_x * self.speed
-       self.world_y += move_y * self.speed
-
-
-       # Clamp player's world position within world bounds (preventing from going off the edge)
-       self.world_x = max(self.size, min(WORLD_WIDTH - self.size, self.world_x))
-       self.world_y = max(self.size, min(WORLD_HEIGHT - self.size, self.world_y))
-
-
-       # Apply dampening to recoil
-       self.recoil_velocity_x *= self.recoil_dampening
-       self.recoil_velocity_y *= self.recoil_dampening
-
-
-       # Ensure recoil doesn't exceed maximum speed
-       recoil_speed = math.sqrt(self.recoil_velocity_x ** 2 + self.recoil_velocity_y ** 2)
-       if recoil_speed > self.max_recoil_speed:
-           factor = self.max_recoil_speed / recoil_speed
-           self.recoil_velocity_x *= factor
-           self.recoil_velocity_y *= factor
-
-
-   def rotate_to_mouse(self, mouse_pos):
-       # Check if autospin is active
-       if self.autospin:
-           # Slowly rotate clockwise
-           self.angle += 0.05  # Adjust the speed of the spin as desired
-       else:
-           # Calculate the angle to point towards the mouse
-           dx = mouse_pos[0] - self.x
-           dy = mouse_pos[1] - self.y
-           self.angle = math.atan2(dy, dx)
-
-
-   def shoot(self):
-       # Calculate the position at the tip of the cannon
-       bullet_x = self.world_x + math.cos(self.angle) * (self.cannon_length/3 + self.size)
-       bullet_y = self.world_y + math.sin(self.angle) * (self.cannon_length/3 + self.size)
-
-
-       # Create a new bullet and add it to the list
-       bullet_speed = 10
-       bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed)
-       self.bullets.append(bullet)
-
-
-       # Apply recoil as a boost
-       recoil_force = 0.2  # Reduced recoil force
-       self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
-       self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
-
-
-   def handle_autofire(self):
-       # Handle the autofire mechanism
-       if self.autofire and self.shoot_cooldown <= 0:
-           self.shoot()
-           self.shoot_cooldown = 15  # Adjust cooldown for autofire rate
-       if self.shoot_cooldown > 0:
-           self.shoot_cooldown -= 1
-
-
-   def take_damage(self, damage):
-       self.health -= damage
-       if self.health <= 0:
-           self.health = 0
-           print("Game Over!")  # You can implement a proper game over screen here
-
-
-   def check_collision_with_shapes(self, shapes):
-       for shape in shapes:
-           if shape.alive:
-               distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-               if distance < self.size + shape.size // 2:
-                   damage_to_player = 5  # Adjust this value to change damage dealt to player
-                   damage_to_shape = 10  # Adjust this value to change damage dealt to shape
-                   self.take_damage(damage_to_player)
-                   shape.take_damage(damage_to_shape)
-
-
-                   # Push the tank away from the shape
-                   angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                   push_distance = (self.size + shape.size // 2) - distance
-                   self.world_x += math.cos(angle) * push_distance
-                   self.world_y += math.sin(angle) * push_distance
-
-# Bullet class with lifespan
 class Bullet:
-  def __init__(self, x, y, vel_x, vel_y):
-      self.world_x = x
-      self.world_y = y
-      self.vel_x = vel_x
-      self.vel_y = vel_y
-      self.radius = 15
-      self.color = AQUA
-      self.lifespan = 120
-      self.damage = 60  # Damage dealt by the bullet
+    def __init__(self, x, y, vel_x, vel_y):
+        self.world_x = x
+        self.world_y = y
+        self.vel_x = vel_x
+        self.vel_y = vel_y
+        self.radius = 10
+        self.color = AQUA
+        self.lifespan = 120
+        self.damage = 25
 
-  def update(self):
-      self.world_x += self.vel_x
-      self.world_y += self.vel_y
-      self.lifespan -= 1
+    def update(self):
+        self.world_x += self.vel_x
+        self.world_y += self.vel_y
+        self.lifespan -= 1
+        if self.world_x - self.radius < 0 or self.world_x + self.radius > WORLD_WIDTH:
+            self.vel_x = 0
+        if self.world_y - self.radius < 0 or self.world_y + self.radius > WORLD_HEIGHT:
+            self.vel_y = 0
 
+    def draw(self, tank):
+        screen_x = self.world_x - tank.world_x + tank.x
+        screen_y = self.world_y - tank.world_y + tank.y
+        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.radius)
 
-  def draw(self, tank):
-      screen_x = self.world_x - tank.world_x + tank.x
-      screen_y = self.world_y - tank.world_y + tank.y
-      pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.radius)
+    def off_screen(self):
+        return (self.world_x < 0 or self.world_x > WORLD_WIDTH or
+                self.world_y < 0 or self.world_y > WORLD_HEIGHT or
+                self.lifespan <= 0)
 
+    def check_collision(self, shapes):
+        for shape in shapes:
+            if shape.alive and shape.check_collision(self.world_x, self.world_y):
+                shape.take_damage(self.damage)
+                return True
+        return False
 
-  def off_screen(self):
-      return self.world_x < 0 or self.world_x > WORLD_WIDTH or self.world_y < 0 or self.world_y > WORLD_HEIGHT or self.lifespan <= 0
-
-
-  def check_collision(self, shapes):
-      for shape in shapes:
-          if shape.alive:  # Only check collision with alive shapes
-              distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-              if distance < self.radius + shape.size // 2:
-                  shape.take_damage(self.damage)
-                  return True
-      return False
 
 
 class Shape:
@@ -279,24 +235,46 @@ class Shape:
         self.world_x = x
         self.world_y = y
         self.shape_type = shape_type
+        self.angle = 0
+        self.rotation_speed = random.uniform(0.01, 0.03)
+        self.rotation_direction = random.choice([-1, 1])
 
         if shape_type == "square":
-            self.size = 40
-            self.health = 100
-            self.max_health = 100
-            self.color = YELLOW
+            self.size, self.health, self.max_health, self.color = 40, 100, 100, YELLOW
         elif shape_type == "triangle":
-            self.size = 60
-            self.health = 200
-            self.max_health = 200
-            self.color = RED
+            self.size, self.health, self.max_health, self.color = 60, 200, 200, RED
         elif shape_type == "pentagon":
-            self.size = 80
-            self.health = 800
-            self.max_health = 800
-            self.color = BLUE
+            self.size, self.health, self.max_health, self.color = 80, 300, 300, BLUE
 
         self.alive = True
+        self.vertices = self.calculate_vertices()
+
+    def calculate_vertices(self):
+        if self.shape_type == "square":
+            return [
+                (-self.size // 2, -self.size // 2),
+                (self.size // 2, -self.size // 2),
+                (self.size // 2, self.size // 2),
+                (-self.size // 2, self.size // 2)
+            ]
+        elif self.shape_type == "triangle":
+            return [
+                (0, -self.size // 2),
+                (-self.size // 2, self.size // 2),
+                (self.size // 2, self.size // 2)
+            ]
+        elif self.shape_type == "pentagon":
+            vertices = []
+            for i in range(5):
+                angle = 2 * math.pi * i / 5 - math.pi / 2
+                x = int(self.size // 2 * math.cos(angle))
+                y = int(self.size // 2 * math.sin(angle))
+                vertices.append((x, y))
+            return vertices
+
+    def update(self):
+        self.angle += self.rotation_speed * self.rotation_direction
+        self.vertices = self.calculate_vertices()
 
     def draw(self, tank):
         if not self.alive:
@@ -305,17 +283,13 @@ class Shape:
         screen_x = self.world_x - tank.world_x + tank.x
         screen_y = self.world_y - tank.world_y + tank.y
 
-        # Draw shapes based on their type
-        if self.shape_type == "square":
-            pygame.draw.rect(screen, self.color,
-                             (screen_x - self.size // 2, screen_y - self.size // 2, self.size, self.size))
-        elif self.shape_type == "triangle":
-            points = [(screen_x, screen_y - self.size // 2),
-                      (screen_x - self.size // 2, screen_y + self.size // 2),
-                      (screen_x + self.size // 2, screen_y + self.size // 2)]
-            pygame.draw.polygon(screen, self.color, points)
-        elif self.shape_type == "pentagon":
-            pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.size // 2)
+        rotated_vertices = []
+        for x, y in self.vertices:
+            rotated_x = x * math.cos(self.angle) - y * math.sin(self.angle)
+            rotated_y = x * math.sin(self.angle) + y * math.cos(self.angle)
+            rotated_vertices.append((int(screen_x + rotated_x), int(screen_y + rotated_y)))
+
+        pygame.draw.polygon(screen, self.color, rotated_vertices)
 
         # Draw health bar
         health_bar_width = self.size
@@ -326,41 +300,64 @@ class Shape:
             int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10),
             int(health_bar_width * health_percentage), health_bar_height))
         pygame.draw.rect(screen, BLACK, (
-            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width,
-            health_bar_height), 1)
+        int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width,
+        health_bar_height), 1)
 
     def take_damage(self, damage):
         self.health -= damage
         if self.health <= 0:
-            self.regenerate()
+            self.alive = False
 
-    def regenerate(self):
-        # Move the shape to a new random location in the world
-        self.world_x = random.randint(100, WORLD_WIDTH - 100)
-        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+    def check_collision(self, x, y):
+        # Transform the point to the shape's local coordinate system
+        local_x = x - self.world_x
+        local_y = y - self.world_y
 
-        # Reset health
-        self.health = self.max_health
+        # Rotate the point in the opposite direction of the shape's rotation
+        rotated_x = local_x * math.cos(-self.angle) - local_y * math.sin(-self.angle)
+        rotated_y = local_x * math.sin(-self.angle) + local_y * math.cos(-self.angle)
 
-        # Mark the shape as alive
-        self.alive = True
+        # Check if the rotated point is inside the shape
+        if self.shape_type == "square":
+            return abs(rotated_x) < self.size // 2 and abs(rotated_y) < self.size // 2
+        elif self.shape_type == "triangle":
+            # Check if point is inside the triangle using barycentric coordinates
+            v0x, v0y = self.vertices[1]
+            v1x, v1y = self.vertices[2]
+            v2x, v2y = self.vertices[0]
 
+            d = (v1y - v2y) * (v0x - v2x) + (v2x - v1x) * (v0y - v2y)
+            a = ((v1y - v2y) * (rotated_x - v2x) + (v2x - v1x) * (rotated_y - v2y)) / d
+            b = ((v2y - v0y) * (rotated_x - v2x) + (v0x - v2x) * (rotated_y - v2y)) / d
+            c = 1 - a - b
 
-# Draw the autofire indicator
+            return 0 <= a <= 1 and 0 <= b <= 1 and 0 <= c <= 1
+        elif self.shape_type == "pentagon":
+            # Check if point is inside the pentagon using ray casting
+            inside = False
+            j = len(self.vertices) - 1
+            for i in range(len(self.vertices)):
+                xi, yi = self.vertices[i]
+                xj, yj = self.vertices[j]
+                if ((yi > rotated_y) != (yj > rotated_y)) and (
+                        rotated_x < (xj - xi) * (rotated_y - yi) / (yj - yi) + xi):
+                    inside = not inside
+                j = i
+            return inside
+
 def draw_autofire_indicator(tank):
- font = pygame.font.SysFont(None, 24)
- autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
- autofire_color = GREEN if tank.autofire else RED
- text_surface = font.render(autofire_text, True, autofire_color)
- screen.blit(text_surface, (10, 10))
+    font = pygame.font.SysFont(None, 24)
+    autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
+    autofire_color = GREEN if tank.autofire else RED
+    text_surface = font.render(autofire_text, True, autofire_color)
+    screen.blit(text_surface, (10, 10))
 
-# Draw the autospin indicator
 def draw_autospin_indicator(tank):
- font = pygame.font.SysFont(None, 24)
- autospin_text = "Autospin: ON" if tank.autospin else "Autospin: OFF"
- autospin_color = GREEN if tank.autospin else RED
- text_surface = font.render(autospin_text, True, autospin_color)
- screen.blit(text_surface, (10, 40))  # Display below the autofire indicator
+    font = pygame.font.SysFont(None, 24)
+    autospin_text = "Autospin: ON" if tank.autospin else "Autospin: OFF"
+    autospin_color = GREEN if tank.autospin else RED
+    text_surface = font.render(autospin_text, True, autospin_color)
+    screen.blit(text_surface, (10, 40))
 
 # Draw the grid-based terrain
 def draw_grid(tank):
@@ -378,26 +375,56 @@ def draw_grid(tank):
          # Draw the grid tile
          pygame.draw.rect(screen, DARK_GRAY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
 
-# Draw the world border
+def format_time(seconds):
+    minutes, seconds = divmod(int(seconds), 60)
+    return f"{minutes:02d}:{seconds:02d}"
+
+def death_screen(screen, clock, killer_object, survival_time):
+    transparent_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    transparent_surface.fill((100, 100, 100, 200))
+
+    font_large = pygame.font.Font(None, 74)
+    font_medium = pygame.font.Font(None, 48)
+    font_small = pygame.font.Font(None, 36)
+
+    death_text = font_large.render("YOU DIED", True, RED)
+    killer_text = font_medium.render(f"Killed by: {killer_object}", True, WHITE)
+    time_text = font_medium.render(f"Survival time: {format_time(survival_time)}", True, WHITE)
+
+    button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 100, 200, 50)
+    button_text = font_small.render("Continue", True, BLACK)
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if button_rect.collidepoint(event.pos):
+                    return
+
+        screen.blit(transparent_surface, (0, 0))
+        screen.blit(death_text, death_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100)))
+        screen.blit(killer_text, killer_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+        screen.blit(time_text, time_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)))
+
+        pygame.draw.rect(screen, WHITE, button_rect)
+        screen.blit(button_text, button_text.get_rect(center=button_rect.center))
+
+        pygame.display.flip()
+        clock.tick(60)
+
 def draw_world_border(tank):
- screen_x = tank.x - tank.world_x
- screen_y = tank.y - tank.world_y
- world_rect = pygame.Rect(screen_x, screen_y, WORLD_WIDTH, WORLD_HEIGHT)
- if screen_y > 0:
-     pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, screen_y))
- if screen_y + WORLD_HEIGHT < SCREEN_HEIGHT:
-     pygame.draw.rect(screen, GRAY,
-                      (0, screen_y + WORLD_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - (screen_y + WORLD_HEIGHT)))
- if screen_x > 0:
-     pygame.draw.rect(screen, GRAY, (0, 0, screen_x, SCREEN_HEIGHT))
- if screen_x + WORLD_WIDTH < SCREEN_WIDTH:
-     pygame.draw.rect(screen, GRAY,
-                      (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
-
-# Initialize a list of shapes in the game
-shapes = [
-]
-
+    screen_x = tank.x - tank.world_x
+    screen_y = tank.y - tank.world_y
+    if screen_y > 0:
+        pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, screen_y))
+    if screen_y + WORLD_HEIGHT < SCREEN_HEIGHT:
+        pygame.draw.rect(screen, GRAY, (0, screen_y + WORLD_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - (screen_y + WORLD_HEIGHT)))
+    if screen_x > 0:
+        pygame.draw.rect(screen, GRAY, (0, 0, screen_x, SCREEN_HEIGHT))
+    if screen_x + WORLD_WIDTH < SCREEN_WIDTH:
+        pygame.draw.rect(screen, GRAY, (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
 
 def draw_minimap(tank, shapes):
     # Define the position of the minimap on the screen (bottom right)
@@ -449,141 +476,100 @@ def draw_minimap_indicator(minimap_visible):
     # Draw the text indicator on the screen
     screen.blit(text_surface, (indicator_x, indicator_y))
 
-class Crasher:
-    def __init__(self, x, y):
-        self.world_x = x
-        self.world_y = y
-        self.size = 30
-        self.color = (255, 105, 180)  # Pink color
-        self.health = 50
-        self.max_health = 50
-        self.alive = True
-        self.speed = 2  # Speed at which the crasher chases the player
 
-    def draw(self, tank):
-        if not self.alive:
-            return
-
-        screen_x = self.world_x - tank.world_x + tank.x
-        screen_y = self.world_y - tank.world_y + tank.y
-
-        # Draw the crasher as a pink triangle
-        points = [
-            (screen_x, screen_y - self.size // 2),
-            (screen_x - self.size // 2, screen_y + self.size // 2),
-            (screen_x + self.size // 2, screen_y + self.size // 2)
-        ]
-        pygame.draw.polygon(screen, self.color, points)
-
-        # Draw health bar
-        health_bar_width = self.size
-        health_bar_height = 5
-        health_percentage = self.health / self.max_health
-        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
-        pygame.draw.rect(screen, health_bar_color, (
-            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10),
-            int(health_bar_width * health_percentage), health_bar_height))
-        pygame.draw.rect(screen, BLACK, (
-            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width,
-            health_bar_height), 1)
-
-    def update(self, tank):
-        if not self.alive:
-            return
-
-        # Move towards the player
-        dx = tank.world_x - self.world_x
-        dy = tank.world_y - self.world_y
-        distance = math.sqrt(dx ** 2 + dy ** 2)
-
-        if distance > 0:
-            dx /= distance
-            dy /= distance
-
-        self.world_x += dx * self.speed
-        self.world_y += dy * self.speed
-
-    def take_damage(self, damage):
-        self.health -= damage
-        if self.health <= 0:
-            self.alive = False
-
-
-for i in range(0,40):
-    shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"square"))
-    shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"triangle"))
-    shapes.append(Shape(random.randint(100,4900),random.randint(100,4900),"pentagon"))
-
+def initialize_shapes():
+    shapes = [
+        Shape(1000, 1000, "square"),
+        Shape(1200, 1200, "triangle"),
+        Shape(1500, 1500, "pentagon"),
+    ]
+    for _ in range(50):
+        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "square"))
+        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "triangle"))
+        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "pentagon"))
+    return shapes
 
 
 def game_loop():
+    global game_over
     tank = Tank()
+    shapes = initialize_shapes()
     running = True
     minimap_visible = False  # Track minimap visibility
+    game_over = False
+    start_time = time.time()
+    killer_object = ""
 
     while running:
         screen.fill(GRAY)
 
-        # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                tank.shoot()
+            elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
+                if tank.shoot_cooldown <= 0:
+                    tank.shoot()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_e:
                     tank.autofire = not tank.autofire
                 if event.key == pygame.K_c:
                     tank.autospin = not tank.autospin
+                if event.key == pygame.K_o:
+                    tank.take_damage(tank.health)
+                    killer_object = "Self-Destruct"
+                    game_over = True
                 if event.key == pygame.K_TAB:  # Toggle minimap with Tab
                     minimap_visible = not minimap_visible
 
         keys_pressed = pygame.key.get_pressed()
-        tank.update(keys_pressed)
-        tank.handle_autofire()
-        mouse_pos = pygame.mouse.get_pos()
-        tank.rotate_to_mouse(mouse_pos)
 
-        # Check for collisions between tank and shapes
-        tank.check_collision_with_shapes(shapes)
+        if not game_over:
+            tank.update(keys_pressed)
+            tank.handle_autofire()
+            mouse_pos = pygame.mouse.get_pos()
+            tank.rotate_to_mouse(mouse_pos)
 
-        # Draw the grid and world border
-        draw_grid(tank)
-        draw_world_border(tank)
+            tank.check_collision_with_shapes(shapes)
 
-        # Update and draw shapes
-        for shape in shapes:
-            shape.draw(tank)
+            draw_grid(tank)
+            draw_world_border(tank)
 
-        # Update and draw bullets
-        for bullet in tank.bullets[:]:
-            bullet.update()
-            if bullet.check_collision(shapes):
-                tank.bullets.remove(bullet)
-            bullet.draw(tank)
-            if bullet.off_screen():
-                tank.bullets.remove(bullet)
+            for shape in shapes:
+                shape.update()
+                shape.draw(tank)
 
-        # Draw the tank
-        tank.draw()
+            for bullet in tank.bullets[:]:
+                bullet.update()
+                if bullet.check_collision(shapes):
+                    tank.bullets.remove(bullet)
+                bullet.draw(tank)
+                if bullet.off_screen():
+                    tank.bullets.remove(bullet)
 
-        # Draw the minimap if it's visible
-        if minimap_visible:
-            draw_minimap(tank, shapes)
+            # Draw the tank
+            tank.draw()
 
-        # Draw the minimap indicator
-        draw_minimap_indicator(minimap_visible)
+            # Draw the minimap if it's visible
+            if minimap_visible:
+                draw_minimap(tank, shapes)
 
-        # Draw the autofire and autospin indicators
-        draw_autofire_indicator(tank)
-        draw_autospin_indicator(tank)
+            # Draw the minimap indicator
+            draw_minimap_indicator(minimap_visible)
+
+            draw_autofire_indicator(tank)
+            draw_autospin_indicator(tank)
+
+        if game_over:
+            survival_time = time.time() - start_time
+            death_screen(screen, clock, killer_object, survival_time)
+            tank.respawn()
+            game_over = False
+            start_time = time.time()
 
         pygame.display.flip()
         clock.tick(60)
 
 # Start the game
-game_loop()
-
-
-# Quit pygame
-pygame.quit()
+if __name__ == "__main__":
+    game_loop()
+    pygame.quit()
