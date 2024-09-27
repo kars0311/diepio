@@ -119,7 +119,7 @@ class Enemy:
         bullet_x = self.world_x + math.cos(self.angle) * self.size
         bullet_y = self.world_y + math.sin(self.angle) * self.size
         bullet_speed = 8
-        bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed)
+        bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 1)
         self.bullets.append(bullet)
 
     def take_damage(self, damage):
@@ -241,7 +241,7 @@ class Tank:
             bullet_x = self.world_x + math.cos(self.angle) * self.size
             bullet_y = self.world_y + math.sin(self.angle) * self.size
             bullet_speed = 10
-            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed)
+            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 0)
             self.bullets.append(bullet)
 
             # Apply recoil
@@ -303,7 +303,7 @@ class Tank:
                     shape.world_y -= math.sin(angle) * push_distance / 2
 
 class Bullet:
-    def __init__(self, x, y, vel_x, vel_y):
+    def __init__(self, x, y, vel_x, vel_y, tankNum):
         self.world_x = x
         self.world_y = y
         self.vel_x = vel_x
@@ -312,6 +312,10 @@ class Bullet:
         self.color = AQUA
         self.lifespan = 120
         self.damage = 25
+        if tankNum == 0:
+            self.color = AQUA
+        if tankNum == 1:
+            self.color = RED
 
     def update(self):
         self.world_x += self.vel_x
