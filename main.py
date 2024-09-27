@@ -25,6 +25,8 @@ MINIMAP_SCALE = MINIMAP_WIDTH / WORLD_WIDTH
 
 
 # Colors
+AQUA = (100,200,255)
+DARK_GRAY = (170,170,170)
 WHITE = (255, 255, 255)
 BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
@@ -51,7 +53,7 @@ class Tank:
        self.size = 40  # Tank body size
        self.speed = 5
        self.angle = 0
-       self.color = BLUE
+       self.color = AQUA
        self.world_x = WORLD_WIDTH // 2
        self.world_y = WORLD_HEIGHT // 2
        self.bullets = []
@@ -62,7 +64,7 @@ class Tank:
        self.cannon_thickness = 35
        self.recoil_velocity_x = 0
        self.recoil_velocity_y = 0
-       self.recoil_dampening = 0.45
+       self.recoil_dampening = 0.85
        self.max_recoil_speed = 2
        self.health = 500  # New: Player health
        self.max_health = 500  # New: Maximum player health
@@ -242,7 +244,7 @@ class Bullet:
       self.vel_x = vel_x
       self.vel_y = vel_y
       self.radius = 15
-      self.color = BLUE
+      self.color = AQUA
       self.lifespan = 120
       self.damage = 60  # Damage dealt by the bullet
 
@@ -250,10 +252,7 @@ class Bullet:
       self.world_x += self.vel_x
       self.world_y += self.vel_y
       self.lifespan -= 1
-      if self.world_x - self.radius < 0 or self.world_x + self.radius > WORLD_WIDTH:
-          self.vel_x = 0
-      if self.world_y - self.radius < 0 or self.world_y + self.radius > WORLD_HEIGHT:
-          self.vel_y = 0
+
 
   def draw(self, tank):
       screen_x = self.world_x - tank.world_x + tank.x
@@ -377,7 +376,7 @@ def draw_grid(tank):
          tile_x = col * TILE_SIZE - offset_x
          tile_y = row * TILE_SIZE - offset_y
          # Draw the grid tile
-         pygame.draw.rect(screen, GRAY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+         pygame.draw.rect(screen, DARK_GRAY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
 
 # Draw the world border
 def draw_world_border(tank):
@@ -523,7 +522,7 @@ def game_loop():
     minimap_visible = False  # Track minimap visibility
 
     while running:
-        screen.fill(WHITE)
+        screen.fill(GRAY)
 
         # Event handling
         for event in pygame.event.get():
