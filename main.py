@@ -308,7 +308,7 @@ class Bullet:
         self.world_y = y
         self.vel_x = vel_x
         self.vel_y = vel_y
-        self.radius = 10
+        self.radius = 15
         self.color = AQUA
         self.lifespan = 120
         self.damage = 25 - (tankNum*15);
@@ -471,7 +471,7 @@ def format_time(seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 def death_screen(screen, clock, killer_object, survival_time):
-    transparent_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    transparent_surface = pygame.Surface((SCREEN_WIDTH+20, SCREEN_HEIGHT), pygame.SRCALPHA)
     transparent_surface.fill((100, 100, 100, 200))
 
     font_large = pygame.font.Font(None, 74)
@@ -531,7 +531,7 @@ def draw_minimap(tank, shapes):
     # Draw the player as a small dot on the minimap
     player_minimap_x = minimap_x + int(tank.world_x * MINIMAP_SCALE)
     player_minimap_y = minimap_y + int(tank.world_y * MINIMAP_SCALE)
-    pygame.draw.circle(screen, BLUE, (player_minimap_x, player_minimap_y), 5)  # Player dot
+    pygame.draw.circle(screen, WHITE, (player_minimap_x, player_minimap_y), 5)  # Player dot
 
     # Draw the shapes on the minimap
     for shape in shapes:
