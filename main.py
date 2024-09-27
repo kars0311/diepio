@@ -51,8 +51,12 @@ class Enemy:
         self.cannon_thickness = 35
         self.health = 500
         self.max_health = 500
+        self.alive = True  # New attribute to track if the enemy is alive
 
     def draw(self, tank):
+        if not self.alive:
+            return  # Don't draw dead enemies
+
         screen_x = self.world_x - tank.world_x + tank.x
         screen_y = self.world_y - tank.world_y + tank.y
 
@@ -93,6 +97,9 @@ class Enemy:
         ), 1)
 
     def update(self, tank):
+        if not self.alive:
+            return  # Don't update dead enemies
+
         # Simple AI: move towards the player
         angle_to_player = math.atan2(tank.world_y - self.world_y, tank.world_x - self.world_x)
         self.world_x += math.cos(angle_to_player) * self.speed
@@ -126,8 +133,8 @@ class Enemy:
         self.health -= damage
         if self.health <= 0:
             self.health = 0
-            return True
-        return False
+            self.alive = False  # Mark the enemy as dead
+        return self.alive
 
 
 class Tank:
@@ -308,7 +315,7 @@ class Bullet:
         self.world_y = y
         self.vel_x = vel_x
         self.vel_y = vel_y
-        self.radius = 15
+        self.radius = 10
         self.color = AQUA
         self.lifespan = 120
         self.damage = 25 - (tankNum*15);
@@ -471,7 +478,7 @@ def format_time(seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 def death_screen(screen, clock, killer_object, survival_time):
-    transparent_surface = pygame.Surface((SCREEN_WIDTH+20, SCREEN_HEIGHT), pygame.SRCALPHA)
+    transparent_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     transparent_surface.fill((100, 100, 100, 200))
 
     font_large = pygame.font.Font(None, 74)
@@ -531,7 +538,7 @@ def draw_minimap(tank, shapes):
     # Draw the player as a small dot on the minimap
     player_minimap_x = minimap_x + int(tank.world_x * MINIMAP_SCALE)
     player_minimap_y = minimap_y + int(tank.world_y * MINIMAP_SCALE)
-    pygame.draw.circle(screen, WHITE, (player_minimap_x, player_minimap_y), 5)  # Player dot
+    pygame.draw.circle(screen, BLUE, (player_minimap_x, player_minimap_y), 5)  # Player dot
 
     # Draw the shapes on the minimap
     for shape in shapes:
@@ -620,11 +627,15 @@ def game_loop():
             for shape in shapes:
                 shape.update()
 
-            for enemy in enemies:
-                enemy.update(tank)
+            # Update and handle dead enemies
+            for enemy in enemies[:]:
+                if enemy.alive:
+                    enemy.update(tank)
+                else:
+                    enemies.remove(enemy)  # Remove dead enemies from the list
 
             # Handle collisions
-            tank.check_collision_with_enemies(enemies)
+            tank.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
             tank.check_collision_with_shapes(shapes)
 
             for bullet in tank.bullets[:]:
@@ -633,16 +644,17 @@ def game_loop():
                     tank.bullets.remove(bullet)
                 elif bullet.check_collision(shapes):
                     tank.bullets.remove(bullet)
-                elif bullet.check_collision_with_enemies(enemies):
+                elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive]):
                     tank.bullets.remove(bullet)
 
             for enemy in enemies[:]:
-                for bullet in enemy.bullets[:]:
-                    bullet.update()
-                    if bullet.off_screen():
-                        enemy.bullets.remove(bullet)
-                    elif bullet.check_collision_with_tank(tank):
-                        enemy.bullets.remove(bullet)
+                if enemy.alive:
+                    for bullet in enemy.bullets[:]:
+                        bullet.update()
+                        if bullet.off_screen():
+                            enemy.bullets.remove(bullet)
+                        elif bullet.check_collision_with_tank(tank):
+                            enemy.bullets.remove(bullet)
 
         # Drawing
         draw_grid(tank)
@@ -652,9 +664,10 @@ def game_loop():
             shape.draw(tank)
 
         for enemy in enemies:
-            enemy.draw(tank)
-            for bullet in enemy.bullets:
-                bullet.draw(tank)
+            if enemy.alive:
+                enemy.draw(tank)
+                for bullet in enemy.bullets:
+                    bullet.draw(tank)
 
         tank.draw()
         for bullet in tank.bullets:
