@@ -174,13 +174,15 @@ class Tank:
 
     def check_collision_with_shapes(self, shapes):
         for shape in shapes:
-            if shape.alive and shape.check_collision(self.world_x, self.world_y):
-                self.take_damage(5)
-                shape.take_damage(10)
-                angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                push_distance = self.size + shape.size // 2
-                self.world_x += math.cos(angle) * push_distance
-                self.world_y += math.sin(angle) * push_distance
+            if shape.alive:
+                distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                if distance < self.size + shape.size // 2:
+                    self.take_damage(5)
+                    shape.take_damage(10)
+                    angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                    push_distance = (self.size + shape.size // 2) - distance
+                    self.world_x += math.cos(angle) * push_distance
+                    self.world_y += math.sin(angle) * push_distance
 
     def respawn(self):
         self.health = self.max_health
@@ -223,12 +225,12 @@ class Bullet:
 
     def check_collision(self, shapes):
         for shape in shapes:
-            if shape.alive and shape.check_collision(self.world_x, self.world_y):
-                shape.take_damage(self.damage)
-                return True
+            if shape.alive:
+                distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                if distance < self.radius + shape.size // 2:
+                    shape.take_damage(self.damage)
+                    return True
         return False
-
-
 
 class Shape:
     def __init__(self, x, y, shape_type):
@@ -247,34 +249,9 @@ class Shape:
             self.size, self.health, self.max_health, self.color = 80, 300, 300, BLUE
 
         self.alive = True
-        self.vertices = self.calculate_vertices()
-
-    def calculate_vertices(self):
-        if self.shape_type == "square":
-            return [
-                (-self.size // 2, -self.size // 2),
-                (self.size // 2, -self.size // 2),
-                (self.size // 2, self.size // 2),
-                (-self.size // 2, self.size // 2)
-            ]
-        elif self.shape_type == "triangle":
-            return [
-                (0, -self.size // 2),
-                (-self.size // 2, self.size // 2),
-                (self.size // 2, self.size // 2)
-            ]
-        elif self.shape_type == "pentagon":
-            vertices = []
-            for i in range(5):
-                angle = 2 * math.pi * i / 5 - math.pi / 2
-                x = int(self.size // 2 * math.cos(angle))
-                y = int(self.size // 2 * math.sin(angle))
-                vertices.append((x, y))
-            return vertices
 
     def update(self):
         self.angle += self.rotation_speed * self.rotation_direction
-        self.vertices = self.calculate_vertices()
 
     def draw(self, tank):
         if not self.alive:
@@ -283,13 +260,24 @@ class Shape:
         screen_x = self.world_x - tank.world_x + tank.x
         screen_y = self.world_y - tank.world_y + tank.y
 
-        rotated_vertices = []
-        for x, y in self.vertices:
-            rotated_x = x * math.cos(self.angle) - y * math.sin(self.angle)
-            rotated_y = x * math.sin(self.angle) + y * math.cos(self.angle)
-            rotated_vertices.append((int(screen_x + rotated_x), int(screen_y + rotated_y)))
+        if self.shape_type == "square":
+            top_left_x = screen_x - self.size // 2
+            top_left_y = screen_y - self.size // 2
+            pygame.draw.rect(screen, self.color, (top_left_x, top_left_y, self.size, self.size))
+        else:
+            points = []
+            num_sides = 3 if self.shape_type == "triangle" else 5
+            peak_angle = -math.pi / 2
+            peak_x = screen_x + math.cos(peak_angle) * self.size // 2
+            peak_y = screen_y + math.sin(peak_angle) * self.size // 2
 
-        pygame.draw.polygon(screen, self.color, rotated_vertices)
+            for i in range(num_sides):
+                angle = self.angle + (math.pi * 2 * i / num_sides)
+                point_x = peak_x + math.cos(angle) * self.size // 2
+                point_y = peak_y + math.sin(angle) * self.size // 2
+                points.append((point_x, point_y))
+
+            pygame.draw.polygon(screen, self.color, points)
 
         # Draw health bar
         health_bar_width = self.size
@@ -299,51 +287,12 @@ class Shape:
         pygame.draw.rect(screen, health_bar_color, (
             int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10),
             int(health_bar_width * health_percentage), health_bar_height))
-        pygame.draw.rect(screen, BLACK, (
-        int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width,
-        health_bar_height), 1)
+        pygame.draw.rect(screen, BLACK, (int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width, health_bar_height), 1)
 
     def take_damage(self, damage):
         self.health -= damage
         if self.health <= 0:
             self.alive = False
-
-    def check_collision(self, x, y):
-        # Transform the point to the shape's local coordinate system
-        local_x = x - self.world_x
-        local_y = y - self.world_y
-
-        # Rotate the point in the opposite direction of the shape's rotation
-        rotated_x = local_x * math.cos(-self.angle) - local_y * math.sin(-self.angle)
-        rotated_y = local_x * math.sin(-self.angle) + local_y * math.cos(-self.angle)
-
-        # Check if the rotated point is inside the shape
-        if self.shape_type == "square":
-            return abs(rotated_x) < self.size // 2 and abs(rotated_y) < self.size // 2
-        elif self.shape_type == "triangle":
-            # Check if point is inside the triangle using barycentric coordinates
-            v0x, v0y = self.vertices[1]
-            v1x, v1y = self.vertices[2]
-            v2x, v2y = self.vertices[0]
-
-            d = (v1y - v2y) * (v0x - v2x) + (v2x - v1x) * (v0y - v2y)
-            a = ((v1y - v2y) * (rotated_x - v2x) + (v2x - v1x) * (rotated_y - v2y)) / d
-            b = ((v2y - v0y) * (rotated_x - v2x) + (v0x - v2x) * (rotated_y - v2y)) / d
-            c = 1 - a - b
-
-            return 0 <= a <= 1 and 0 <= b <= 1 and 0 <= c <= 1
-        elif self.shape_type == "pentagon":
-            # Check if point is inside the pentagon using ray casting
-            inside = False
-            j = len(self.vertices) - 1
-            for i in range(len(self.vertices)):
-                xi, yi = self.vertices[i]
-                xj, yj = self.vertices[j]
-                if ((yi > rotated_y) != (yj > rotated_y)) and (
-                        rotated_x < (xj - xi) * (rotated_y - yi) / (yj - yi) + xi):
-                    inside = not inside
-                j = i
-            return inside
 
 def draw_autofire_indicator(tank):
     font = pygame.font.SysFont(None, 24)
