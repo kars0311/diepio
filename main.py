@@ -7,7 +7,7 @@ import time
 pygame.init()
 
 # Screen and world dimensions
-SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
 TILE_SIZE = 50
 
