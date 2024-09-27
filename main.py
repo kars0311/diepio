@@ -37,6 +37,99 @@ pygame.display.set_caption("Diep.io")
 # Clock object to control game speed
 clock = pygame.time.Clock()
 
+class Enemy:
+    def __init__(self, x, y):
+        self.world_x = x
+        self.world_y = y
+        self.size = 40
+        self.speed = 3
+        self.angle = 0
+        self.color = RED
+        self.bullets = []
+        self.shoot_cooldown = 0
+        self.cannon_length = 75
+        self.cannon_thickness = 35
+        self.health = 500
+        self.max_health = 500
+
+    def draw(self, tank):
+        screen_x = self.world_x - tank.world_x + tank.x
+        screen_y = self.world_y - tank.world_y + tank.y
+
+        # Draw cannon
+        cannon_end_x = screen_x + math.cos(self.angle) * self.cannon_length
+        cannon_end_y = screen_y + math.sin(self.angle) * self.cannon_length
+        perpendicular_angle = self.angle + math.pi / 2
+        half_thickness = self.cannon_thickness / 2
+        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
+        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
+        cannon_corners = [
+            (screen_x + corner_offset_x, screen_y + corner_offset_y),
+            (screen_x - corner_offset_x, screen_y - corner_offset_y),
+            (cannon_end_x - corner_offset_x, cannon_end_y - corner_offset_y),
+            (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
+        ]
+        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+
+        # Draw enemy body
+        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
+
+        # Draw health bar
+        health_bar_width = self.size * 2
+        health_bar_height = 5
+        health_percentage = self.health / self.max_health
+        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+        pygame.draw.rect(screen, health_bar_color, (
+            int(screen_x - health_bar_width // 2),
+            int(screen_y - self.size - 15),
+            int(health_bar_width * health_percentage),
+            health_bar_height
+        ))
+        pygame.draw.rect(screen, BLACK, (
+            int(screen_x - health_bar_width // 2),
+            int(screen_y - self.size - 15),
+            health_bar_width,
+            health_bar_height
+        ), 1)
+
+    def update(self, tank):
+        # Simple AI: move towards the player
+        angle_to_player = math.atan2(tank.world_y - self.world_y, tank.world_x - self.world_x)
+        self.world_x += math.cos(angle_to_player) * self.speed
+        self.world_y += math.sin(angle_to_player) * self.speed
+
+        # Rotate towards the player
+        self.angle = angle_to_player
+
+        # Shoot at the player
+        if self.shoot_cooldown <= 0:
+            self.shoot()
+            self.shoot_cooldown = 60  # Shoot every second
+
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= 1
+
+        # Update bullets
+        for bullet in self.bullets[:]:
+            bullet.update()
+            if bullet.off_screen():
+                self.bullets.remove(bullet)
+
+    def shoot(self):
+        bullet_x = self.world_x + math.cos(self.angle) * self.size
+        bullet_y = self.world_y + math.sin(self.angle) * self.size
+        bullet_speed = 8
+        bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed)
+        self.bullets.append(bullet)
+
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health <= 0:
+            self.health = 0
+            return True
+        return False
+
+
 class Tank:
     def __init__(self):
         self.x = SCREEN_WIDTH // 2
@@ -193,6 +286,19 @@ class Tank:
         self.shoot_cooldown = 0
         self.regen_cooldown = 0
 
+    def check_collision_with_enemies(self, enemies):
+        for enemy in enemies:
+            distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
+            if distance < self.size + enemy.size:
+                self.take_damage(5)
+                enemy.take_damage(5)
+                angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
+                push_distance = (self.size + enemy.size) - distance
+                self.world_x += math.cos(angle) * push_distance / 2
+                self.world_y += math.sin(angle) * push_distance / 2
+                enemy.world_x -= math.cos(angle) * push_distance / 2
+                enemy.world_y -= math.sin(angle) * push_distance / 2
+
 class Bullet:
     def __init__(self, x, y, vel_x, vel_y):
         self.world_x = x
@@ -231,6 +337,22 @@ class Bullet:
                     shape.take_damage(self.damage)
                     return True
         return False
+
+    def check_collision_with_enemies(self, enemies):
+        for enemy in enemies:
+            distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
+            if distance < self.radius + enemy.size:
+                enemy.take_damage(self.damage)
+                return True
+        return False
+
+def initialize_enemies():
+    enemies = []
+    for _ in range(5):
+        x = random.randint(100, WORLD_WIDTH - 100)
+        y = random.randint(100, WORLD_HEIGHT - 100)
+        enemies.append(Enemy(x, y))
+    return enemies
 
 class Shape:
     def __init__(self, x, y, shape_type):
@@ -443,8 +565,9 @@ def game_loop():
     global game_over
     tank = Tank()
     shapes = initialize_shapes()
+    enemies = initialize_enemies()
     running = True
-    minimap_visible = False  # Track minimap visibility
+    minimap_visible = False
     game_over = False
     start_time = time.time()
     killer_object = ""
@@ -479,6 +602,7 @@ def game_loop():
             tank.rotate_to_mouse(mouse_pos)
 
             tank.check_collision_with_shapes(shapes)
+            tank.check_collision_with_enemies(enemies)
 
             draw_grid(tank)
             draw_world_border(tank)
@@ -487,13 +611,27 @@ def game_loop():
                 shape.update()
                 shape.draw(tank)
 
+            for enemy in enemies[:]:
+                enemy.update(tank)
+                enemy.draw(tank)
+                for bullet in enemy.bullets[:]:
+                    bullet.update()
+                    if bullet.check_collision_with_enemies([tank]):
+                        enemy.bullets.remove(bullet)
+                    bullet.draw(tank)
+                    if bullet.off_screen():
+                        enemy.bullets.remove(bullet)
+
             for bullet in tank.bullets[:]:
                 bullet.update()
-                if bullet.check_collision(shapes):
+                if bullet.check_collision(shapes) or bullet.check_collision_with_enemies(enemies):
                     tank.bullets.remove(bullet)
                 bullet.draw(tank)
                 if bullet.off_screen():
                     tank.bullets.remove(bullet)
+
+            # Remove dead enemies
+            enemies = [enemy for enemy in enemies if enemy.health > 0]
 
             # Draw the tank
             tank.draw()
@@ -512,6 +650,7 @@ def game_loop():
             survival_time = time.time() - start_time
             death_screen(screen, clock, killer_object, survival_time)
             tank.respawn()
+            enemies = initialize_enemies()  # Respawn enemies
             game_over = False
             start_time = time.time()
 
