@@ -311,7 +311,7 @@ class Bullet:
         self.radius = 10
         self.color = AQUA
         self.lifespan = 120
-        self.damage = 25
+        self.damage = 25 - (tankNum*15);
         if tankNum == 0:
             self.color = AQUA
         if tankNum == 1:
