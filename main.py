@@ -31,7 +31,7 @@ GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
 
 # Create the screen object
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Diep.io")
 
 # Clock object to control game speed
