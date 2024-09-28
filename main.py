@@ -27,6 +27,7 @@ BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
 RED = (255, 0, 0)
+PINK = (255,150,150)
 GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
 
@@ -399,7 +400,7 @@ class Bullet:
         self.world_y = y
         self.vel_x = vel_x
         self.vel_y = vel_y
-        self.radius = 10
+        self.radius = 15
         self.color = AQUA
         self.lifespan = 120
         self.damage = 25 - (tankNum*15);
@@ -459,6 +460,7 @@ class Bullet:
             tank.take_damage(self.damage, "Enemy")
             return True
         return False
+
 
 def initialize_enemies():
     enemies = []
@@ -599,7 +601,7 @@ def format_time(seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 def death_screen(screen, clock, killer_object, survival_time):
-    transparent_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    transparent_surface = pygame.Surface((SCREEN_WIDTH+20, SCREEN_HEIGHT), pygame.SRCALPHA)
     transparent_surface.fill((100, 100, 100, 200))
 
     font_large = pygame.font.Font(None, 74)
@@ -637,15 +639,15 @@ def draw_world_border(tank):
     screen_x = tank.x - tank.world_x
     screen_y = tank.y - tank.world_y
     if screen_y > 0:
-        pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH, screen_y))
+        pygame.draw.rect(screen, GRAY, (0, 0, SCREEN_WIDTH+20, screen_y))
     if screen_y + WORLD_HEIGHT < SCREEN_HEIGHT:
         pygame.draw.rect(screen, GRAY,
-                         (0, screen_y + WORLD_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - (screen_y + WORLD_HEIGHT)))
-    if screen_x > 0:
+                         (0, screen_y + WORLD_HEIGHT, SCREEN_WIDTH+20, SCREEN_HEIGHT - (screen_y + WORLD_HEIGHT)))
+    if screen_x > 0: #left border
         pygame.draw.rect(screen, GRAY, (0, 0, screen_x, SCREEN_HEIGHT))
-    if screen_x + WORLD_WIDTH < SCREEN_WIDTH:
+    if screen_x + WORLD_WIDTH < SCREEN_WIDTH: #right border
         pygame.draw.rect(screen, GRAY,
-                         (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
+                         (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH)+20, SCREEN_HEIGHT))
 
 def draw_minimap(tank, shapes, enemies, mode):
     minimap_x = SCREEN_WIDTH - MINIMAP_WIDTH - 10
@@ -659,7 +661,7 @@ def draw_minimap(tank, shapes, enemies, mode):
     if mode >= 1:
         player_minimap_x = minimap_x + int(tank.world_x * MINIMAP_SCALE)
         player_minimap_y = minimap_y + int(tank.world_y * MINIMAP_SCALE)
-        pygame.draw.circle(screen, BLUE, (player_minimap_x, player_minimap_y), 5)
+        pygame.draw.circle(screen, WHITE, (player_minimap_x, player_minimap_y), 5)
 
     # Draw the shapes
     if mode in [3, 4]:
@@ -684,7 +686,7 @@ def draw_minimap(tank, shapes, enemies, mode):
             if enemy.alive:
                 enemy_minimap_x = minimap_x + int(enemy.world_x * MINIMAP_SCALE)
                 enemy_minimap_y = minimap_y + int(enemy.world_y * MINIMAP_SCALE)
-                pygame.draw.circle(screen, RED, (enemy_minimap_x, enemy_minimap_y), 3)
+                pygame.draw.circle(screen, PINK, (enemy_minimap_x, enemy_minimap_y), 3)
 
 def draw_minimap_indicator(mode):
     font = pygame.font.SysFont(None, 24)
