@@ -608,62 +608,56 @@ def draw_world_border(tank):
         pygame.draw.rect(screen, GRAY,
                          (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
 
-def draw_minimap(tank, shapes, enemies):
-    # Define the position of the minimap on the screen (bottom right)
-    minimap_x = SCREEN_WIDTH - MINIMAP_WIDTH - 10  # 10px margin from right edge
-    minimap_y = SCREEN_HEIGHT - MINIMAP_HEIGHT - 10  # 10px margin from bottom edge
+def draw_minimap(tank, shapes, enemies, mode):
+    minimap_x = SCREEN_WIDTH - MINIMAP_WIDTH - 10
+    minimap_y = SCREEN_HEIGHT - MINIMAP_HEIGHT - 10
 
     # Draw the minimap background
     pygame.draw.rect(screen, BLACK, (minimap_x, minimap_y, MINIMAP_WIDTH, MINIMAP_HEIGHT))
     pygame.draw.rect(screen, WHITE, (minimap_x, minimap_y, MINIMAP_WIDTH, MINIMAP_HEIGHT), 2)
 
-    # Draw the player as a small dot on the minimap
-    player_minimap_x = minimap_x + int(tank.world_x * MINIMAP_SCALE)
-    player_minimap_y = minimap_y + int(tank.world_y * MINIMAP_SCALE)
-    pygame.draw.circle(screen, BLUE, (player_minimap_x, player_minimap_y), 5)  # Player dot
+    # Draw the player
+    if mode >= 1:
+        player_minimap_x = minimap_x + int(tank.world_x * MINIMAP_SCALE)
+        player_minimap_y = minimap_y + int(tank.world_y * MINIMAP_SCALE)
+        pygame.draw.circle(screen, BLUE, (player_minimap_x, player_minimap_y), 5)
 
-    # Draw the shapes on the minimap
-    for shape in shapes:
-        if shape.alive:
-            shape_minimap_x = minimap_x + int(shape.world_x * MINIMAP_SCALE)
-            shape_minimap_y = minimap_y + int(shape.world_y * MINIMAP_SCALE)
+    # Draw the shapes
+    if mode in [3, 4]:
+        for shape in shapes:
+            if shape.alive:
+                shape_minimap_x = minimap_x + int(shape.world_x * MINIMAP_SCALE)
+                shape_minimap_y = minimap_y + int(shape.world_y * MINIMAP_SCALE)
+                if shape.shape_type == "square":
+                    pygame.draw.rect(screen, shape.color, (shape_minimap_x - 2, shape_minimap_y - 2, 4, 4))
+                elif shape.shape_type == "triangle":
+                    pygame.draw.polygon(screen, shape.color, [
+                        (shape_minimap_x, shape_minimap_y - 3),
+                        (shape_minimap_x - 3, shape_minimap_y + 3),
+                        (shape_minimap_x + 3, shape_minimap_y + 3)
+                    ])
+                elif shape.shape_type == "pentagon":
+                    pygame.draw.circle(screen, shape.color, (shape_minimap_x, shape_minimap_y), 3)
 
-            # Use smaller sizes on the minimap for shapes
-            if shape.shape_type == "square":
-                pygame.draw.rect(screen, shape.color,
-                                 (shape_minimap_x - 2, shape_minimap_y - 2, 4, 4))  # Small square
-            elif shape.shape_type == "triangle":
-                pygame.draw.polygon(screen, shape.color,
-                                    [(shape_minimap_x, shape_minimap_y - 3),
-                                     (shape_minimap_x - 3, shape_minimap_y + 3),
-                                     (shape_minimap_x + 3, shape_minimap_y + 3)])  # Small triangle
-            elif shape.shape_type == "pentagon":
-                pygame.draw.circle(screen, shape.color, (shape_minimap_x, shape_minimap_y), 3)  # Small circle
+    # Draw the enemies
+    if mode in [2, 4]:
+        for enemy in enemies:
+            if enemy.alive:
+                enemy_minimap_x = minimap_x + int(enemy.world_x * MINIMAP_SCALE)
+                enemy_minimap_y = minimap_y + int(enemy.world_y * MINIMAP_SCALE)
+                pygame.draw.circle(screen, RED, (enemy_minimap_x, enemy_minimap_y), 3)
 
-    # Draw the enemy tanks on the minimap
-    for enemy in enemies:
-        if enemy.alive:
-            enemy_minimap_x = minimap_x + int(enemy.world_x * MINIMAP_SCALE)
-            enemy_minimap_y = minimap_y + int(enemy.world_y * MINIMAP_SCALE)
-            pygame.draw.circle(screen, RED, (enemy_minimap_x, enemy_minimap_y), 3)  # Small red dot for enemies
-
-def draw_minimap_indicator(minimap_visible):
+def draw_minimap_indicator(mode):
     font = pygame.font.SysFont(None, 24)
-    indicator_text = "Minimap: ON" if minimap_visible else "Minimap: OFF"
+    mode_names = ["OFF", "Player Only", "Player + Enemies", "Player + Shapes", "All"]
+    indicator_text = f"Minimap: {mode_names[mode]}"
     text_surface = font.render(indicator_text, True, BLACK)
 
-    # Position of the indicator (bottom-right corner or above minimap)
-    if minimap_visible:
-        # Place the indicator slightly above the minimap
-        indicator_x = SCREEN_WIDTH - 120  # Slightly offset from the minimap
-        indicator_y = SCREEN_HEIGHT - 230  # Above the minimap
-    else:
-        # Place the indicator in the bottom-right corner when minimap is off
-        indicator_x = SCREEN_WIDTH - 120
-        indicator_y = SCREEN_HEIGHT - 20
+    indicator_x = SCREEN_WIDTH - 200
+    indicator_y = SCREEN_HEIGHT - 230 if mode > 0 else SCREEN_HEIGHT - 20
 
-    # Draw the text indicator on the screen
     screen.blit(text_surface, (indicator_x, indicator_y))
+
 
 def initialize_shapes():
     shapes = [
@@ -690,7 +684,7 @@ def game_loop():
     shapes = initialize_shapes()
     enemies = initialize_enemies() if include_enemies else []
     running = True
-    minimap_visible = True
+    minimap_mode = 0  # Start with all elements visible
     game_over = False
     start_time = time.time()
     killer_object = ""
@@ -712,7 +706,7 @@ def game_loop():
                 if event.key == pygame.K_o:
                     tank.take_damage(tank.health, "Self-Destruct")
                 if event.key == pygame.K_TAB:
-                    minimap_visible = not minimap_visible
+                    minimap_mode = (minimap_mode + 1) % 5
 
         if not game_over:
             keys_pressed = pygame.key.get_pressed()
@@ -723,7 +717,6 @@ def game_loop():
             for shape in shapes:
                 shape.update()
 
-            # Update and handle enemies only if they're included
             if include_enemies:
                 for enemy in enemies[:]:
                     if enemy.alive:
@@ -773,12 +766,12 @@ def game_loop():
         for bullet in tank.bullets:
             bullet.draw(tank)
 
-        if minimap_visible:
-            draw_minimap(tank, shapes, enemies)
+        if minimap_mode > 0:
+            draw_minimap(tank, shapes, enemies, minimap_mode)
 
         draw_autofire_indicator(tank)
         draw_autospin_indicator(tank)
-        draw_minimap_indicator(minimap_visible)
+        draw_minimap_indicator(minimap_mode)
 
         pygame.display.flip()
         clock.tick(60)
@@ -791,7 +784,6 @@ def game_loop():
             start_time = time.time()
 
     pygame.quit()
-
 
 # Main game execution
 if __name__ == "__main__":
