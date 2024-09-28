@@ -79,7 +79,8 @@ class Enemy:
         self.cannon_thickness = 35
         self.health = 500
         self.max_health = 500
-        self.alive = True  # New attribute to track if the enemy is alive
+        self.alive = True
+        self.target = None
 
     def draw(self, tank):
         if not self.alive:
@@ -125,20 +126,30 @@ class Enemy:
                 health_bar_height
             ), 1)
 
-    def update(self, tank):
+    def update(self, tank, shapes):
         if not self.alive:
-            return  # Don't update dead enemies
+            return
 
-        # Simple AI: move towards the player
-        angle_to_player = math.atan2(tank.world_y - self.world_y, tank.world_x - self.world_x)
-        self.world_x += math.cos(angle_to_player) * self.speed
-        self.world_y += math.sin(angle_to_player) * self.speed
+        # Define the boundary around the player
+        boundary_width = SCREEN_WIDTH * 1.5
+        boundary_height = SCREEN_HEIGHT * 1.5
+        in_boundary = (abs(self.world_x - tank.world_x) < boundary_width / 2 and
+                       abs(self.world_y - tank.world_y) < boundary_height / 2)
 
-        # Rotate towards the player
-        self.angle = angle_to_player
+        if in_boundary:
+            self.target_player(tank)
+        else:
+            self.target_nearest_shape(shapes)
 
-        # Shoot at the player
-        if self.shoot_cooldown <= 0:
+        # Move towards the target
+        if self.target:
+            angle_to_target = math.atan2(self.target[1] - self.world_y, self.target[0] - self.world_x)
+            self.world_x += math.cos(angle_to_target) * self.speed
+            self.world_y += math.sin(angle_to_target) * self.speed
+            self.angle = angle_to_target
+
+        # Shoot at the target
+        if self.shoot_cooldown <= 0 and self.target:
             self.shoot()
             self.shoot_cooldown = 60  # Shoot every second
 
@@ -150,6 +161,23 @@ class Enemy:
             bullet.update()
             if bullet.off_screen():
                 self.bullets.remove(bullet)
+
+    def target_player(self, tank):
+        self.target = (tank.world_x, tank.world_y)
+
+    def target_nearest_shape(self, shapes):
+        nearest_shape = None
+        min_distance = float('inf')
+        for shape in shapes:
+            if shape.alive:
+                distance = math.sqrt((self.world_x - shape.world_x)**2 + (self.world_y - shape.world_y)**2)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_shape = shape
+        if nearest_shape:
+            self.target = (nearest_shape.world_x, nearest_shape.world_y)
+        else:
+            self.target = None
 
     def shoot(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
@@ -720,7 +748,7 @@ def game_loop():
             if include_enemies:
                 for enemy in enemies[:]:
                     if enemy.alive:
-                        enemy.update(tank)
+                        enemy.update(tank, shapes)  # Pass shapes argument here
                     else:
                         enemies.remove(enemy)
 
