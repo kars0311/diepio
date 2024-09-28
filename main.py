@@ -78,23 +78,24 @@ class Enemy:
         # Draw enemy body
         pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
 
-        # Draw health bar
-        health_bar_width = self.size * 2
-        health_bar_height = 5
-        health_percentage = self.health / self.max_health
-        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
-        pygame.draw.rect(screen, health_bar_color, (
-            int(screen_x - health_bar_width // 2),
-            int(screen_y - self.size - 15),
-            int(health_bar_width * health_percentage),
-            health_bar_height
-        ))
-        pygame.draw.rect(screen, BLACK, (
-            int(screen_x - health_bar_width // 2),
-            int(screen_y - self.size - 15),
-            health_bar_width,
-            health_bar_height
-        ), 1)
+        # Draw health bar only if health is below max
+        if self.health < self.max_health:
+            health_bar_width = self.size * 2
+            health_bar_height = 5
+            health_percentage = self.health / self.max_health
+            health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+            pygame.draw.rect(screen, health_bar_color, (
+                int(screen_x - health_bar_width // 2),
+                int(screen_y + self.size + 5),  # Move below the enemy
+                int(health_bar_width * health_percentage),
+                health_bar_height
+            ))
+            pygame.draw.rect(screen, BLACK, (
+                int(screen_x - health_bar_width // 2),
+                int(screen_y + self.size + 5),  # Move below the enemy
+                health_bar_width,
+                health_bar_height
+            ), 1)
 
     def update(self, tank):
         if not self.alive:
@@ -182,23 +183,24 @@ class Tank:
         # Draw tank body
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
 
-        # Draw health bar
-        health_bar_width = self.size * 2
-        health_bar_height = 5
-        health_percentage = self.health / self.max_health
-        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
-        pygame.draw.rect(screen, health_bar_color, (
-            int(self.x - health_bar_width // 2),
-            int(self.y - self.size - 15),
-            int(health_bar_width * health_percentage),
-            health_bar_height
-        ))
-        pygame.draw.rect(screen, BLACK, (
-            int(self.x - health_bar_width // 2),
-            int(self.y - self.size - 15),
-            health_bar_width,
-            health_bar_height
-        ), 1)
+        # Draw health bar only if health is below max
+        if self.health < self.max_health:
+            health_bar_width = self.size * 2
+            health_bar_height = 5
+            health_percentage = self.health / self.max_health
+            health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+            pygame.draw.rect(screen, health_bar_color, (
+                int(self.x - health_bar_width // 2),
+                int(self.y + self.size + 5),  # Move below the tank
+                int(health_bar_width * health_percentage),
+                health_bar_height
+            ))
+            pygame.draw.rect(screen, BLACK, (
+                int(self.x - health_bar_width // 2),
+                int(self.y + self.size + 5),  # Move below the tank
+                health_bar_width,
+                health_bar_height
+            ), 1)
 
     def update(self, keys_pressed):
         move_x, move_y = 0, 0
@@ -426,17 +428,24 @@ class Shape:
 
             pygame.draw.polygon(screen, self.color, points)
 
-        # Draw health bar
-        health_bar_width = self.size
-        health_bar_height = 5
-        health_percentage = self.health / self.max_health
-        health_bar_color = RED if self.health < self.max_health / 2 else GREEN
-        pygame.draw.rect(screen, health_bar_color, (
-            int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10),
-            int(health_bar_width * health_percentage), health_bar_height))
-        pygame.draw.rect(screen, BLACK, (
-        int(screen_x - health_bar_width // 2), int(screen_y - self.size // 2 - 10), health_bar_width,
-        health_bar_height), 1)
+        # Draw health bar only if health is below max
+        if self.health < self.max_health:
+            health_bar_width = self.size
+            health_bar_height = 5
+            health_percentage = self.health / self.max_health
+            health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+            pygame.draw.rect(screen, health_bar_color, (
+                int(screen_x - health_bar_width // 2),
+                int(screen_y + self.size // 2 + 5),  # Move below the shape
+                int(health_bar_width * health_percentage),
+                health_bar_height
+            ))
+            pygame.draw.rect(screen, BLACK, (
+                int(screen_x - health_bar_width // 2),
+                int(screen_y + self.size // 2 + 5),  # Move below the shape
+                health_bar_width,
+                health_bar_height
+            ), 1)
 
     def take_damage(self, damage):
         self.health -= damage
