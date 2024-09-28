@@ -183,7 +183,7 @@ class Enemy:
     def shoot(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
         bullet_y = self.world_y + math.sin(self.angle) * self.size
-        bullet_speed = 8
+        bullet_speed = 4
         bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 1)
         self.bullets.append(bullet)
 
@@ -317,7 +317,7 @@ class Tank:
         if self.shoot_cooldown <= 0:
             bullet_x = self.world_x + math.cos(self.angle) * self.size
             bullet_y = self.world_y + math.sin(self.angle) * self.size
-            bullet_speed = 10
+            bullet_speed = 5
             bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 0)
             self.bullets.append(bullet)
 
@@ -402,8 +402,9 @@ class Bullet:
         self.vel_y = vel_y
         self.radius = 15
         self.color = AQUA
-        self.lifespan = 120
-        self.damage = 25 - (tankNum*15);
+        self.lifespan = 400
+        self.damage = 25 - (tankNum*15)
+        self.tankNum = tankNum  # 0 for player, 1 for enemy
         if tankNum == 0:
             self.color = AQUA
         if tankNum == 1:
@@ -461,6 +462,13 @@ class Bullet:
             return True
         return False
 
+    def check_collision_with_bullets(self, other_bullets):
+        for other_bullet in other_bullets:
+            if self.tankNum != other_bullet.tankNum:  # Only check collision between different types of bullets
+                distance = math.sqrt((self.world_x - other_bullet.world_x) ** 2 + (self.world_y - other_bullet.world_y) ** 2)
+                if distance < self.radius + other_bullet.radius:
+                    return other_bullet
+        return None
 
 def initialize_enemies():
     enemies = []
@@ -800,6 +808,36 @@ def game_loop():
                                 enemy.bullets.remove(bullet)
                             elif bullet.check_collision_with_tank(tank):
                                 enemy.bullets.remove(bullet)
+
+            for bullet in tank.bullets[:]:
+                bullet.update()
+                if bullet.off_screen():
+                    tank.bullets.remove(bullet)
+                elif bullet.check_collision(shapes):
+                    tank.bullets.remove(bullet)
+                elif include_enemies:
+                    enemy_bullet = bullet.check_collision_with_bullets([b for e in enemies for b in e.bullets])
+                    if enemy_bullet:
+                        tank.bullets.remove(bullet)
+                        enemy_bullet.lifespan = 0  # Mark enemy bullet for removal
+                    elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive]):
+                        tank.bullets.remove(bullet)
+
+            if include_enemies:
+                for enemy in enemies:
+                    if enemy.alive:
+                        enemy.check_collision_with_enemies(enemies)
+                        for bullet in enemy.bullets[:]:
+                            bullet.update()
+                            if bullet.off_screen() or bullet.lifespan <= 0:
+                                enemy.bullets.remove(bullet)
+                            else:
+                                player_bullet = bullet.check_collision_with_bullets(tank.bullets)
+                                if player_bullet:
+                                    enemy.bullets.remove(bullet)
+                                    player_bullet.lifespan = 0  # Mark player bullet for removal
+                                elif bullet.check_collision_with_tank(tank):
+                                    enemy.bullets.remove(bullet)
 
         # Drawing
         draw_grid(tank)
