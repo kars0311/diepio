@@ -193,6 +193,17 @@ class Enemy:
             self.alive = False  # Mark the enemy as dead
         return self.alive
 
+    def check_collision_with_enemies(self, enemies):
+        for enemy in enemies:
+            distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
+            if distance < self.size + enemy.size:
+                angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
+                push_distance = (self.size + enemy.size) - distance
+                self.world_x += math.cos(angle) * push_distance / 2
+                self.world_y += math.sin(angle) * push_distance / 2
+                enemy.world_x -= math.cos(angle) * push_distance / 2
+                enemy.world_y -= math.sin(angle) * push_distance / 2
+
 
 class Tank:
     def __init__(self):
@@ -769,6 +780,7 @@ def game_loop():
             if include_enemies:
                 for enemy in enemies:
                     if enemy.alive:
+                        enemy.check_collision_with_enemies(enemies)
                         for bullet in enemy.bullets[:]:
                             bullet.update()
                             if bullet.off_screen():
