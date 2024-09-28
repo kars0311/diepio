@@ -564,7 +564,18 @@ class Shape:
     def take_damage(self, damage):
         self.health -= damage
         if self.health <= 0:
-            self.alive = False
+            self.regenerate()
+    def regenerate(self):
+        # Move the shape to a new random location in the world
+        self.world_x = random.randint(100, WORLD_WIDTH - 100)
+        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+
+        # Reset health
+        self.health = self.max_health
+
+        # Mark the shape as alive
+        self.alive = True
+
 
 def draw_autofire_indicator(tank):
     font = pygame.font.SysFont(None, 24)
