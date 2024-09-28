@@ -37,6 +37,34 @@ pygame.display.set_caption("Diep.io")
 # Clock object to control game speed
 clock = pygame.time.Clock()
 
+def draw_menu(screen, clock):
+    menu_font = pygame.font.Font(None, 74)
+    option_font = pygame.font.Font(None, 50)
+
+    title = menu_font.render("Diep.io", True, BLACK)
+    option1 = option_font.render("1. Play with enemy bots", True, BLACK)
+    option2 = option_font.render("2. Play without enemy bots", True, BLACK)
+
+    while True:
+        screen.fill(WHITE)
+        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 100))
+        screen.blit(option1, (SCREEN_WIDTH // 2 - option1.get_width() // 2, 300))
+        screen.blit(option2, (SCREEN_WIDTH // 2 - option2.get_width() // 2, 400))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return None
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    return True
+                if event.key == pygame.K_2:
+                    return False
+
+        clock.tick(60)
+
 class Enemy:
     def __init__(self, x, y):
         self.world_x = x
@@ -300,16 +328,31 @@ class Tank:
     def check_collision_with_shapes(self, shapes):
         for shape in shapes:
             if shape.alive:
-                distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-                if distance < self.size + shape.size // 2:
-                    self.take_damage(5, "Shape")
-                    shape.take_damage(5)
-                    angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                    push_distance = (self.size + shape.size // 2) - distance
-                    self.world_x += math.cos(angle) * push_distance / 2
-                    self.world_y += math.sin(angle) * push_distance / 2
-                    shape.world_x -= math.cos(angle) * push_distance / 2
-                    shape.world_y -= math.sin(angle) * push_distance / 2
+                if shape.shape_type == "pentagon":
+                    # Check if any of the tank's edge points are inside the pentagon
+                    for angle in range(0, 360, 30):  # Check 12 points around the tank
+                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
+                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
+                        if shape.point_inside_polygon(point_x, point_y):
+                            self.take_damage(5, "Shape")
+                            shape.take_damage(5)
+                            # Push the tank away from the pentagon
+                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                            self.world_x += math.cos(angle) * 5
+                            self.world_y += math.sin(angle) * 5
+                            break
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.size + shape.size // 2:
+                        self.take_damage(5, "Shape")
+                        shape.take_damage(5)
+                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                        push_distance = (self.size + shape.size // 2) - distance
+                        self.world_x += math.cos(angle) * push_distance / 2
+                        self.world_y += math.sin(angle) * push_distance / 2
+                        shape.world_x -= math.cos(angle) * push_distance / 2
+                        shape.world_y -= math.sin(angle) * push_distance / 2
+
 
 class Bullet:
     def __init__(self, x, y, vel_x, vel_y, tankNum):
@@ -352,10 +395,15 @@ class Bullet:
     def check_collision(self, shapes):
         for shape in shapes:
             if shape.alive:
-                distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-                if distance < self.radius + shape.size // 2:
-                    shape.take_damage(self.damage)
-                    return True
+                if shape.shape_type == "pentagon":
+                    if shape.point_inside_polygon(self.world_x, self.world_y):
+                        shape.take_damage(self.damage)
+                        return True
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.radius + shape.size // 2:
+                        shape.take_damage(self.damage)
+                        return True
         return False
 
     def check_collision_with_enemies(self, enemies):
@@ -389,6 +437,7 @@ class Shape:
         self.angle = 0
         self.rotation_speed = random.uniform(0.01, 0.03)
         self.rotation_direction = random.choice([-1, 1])
+        self.points = []
 
         if shape_type == "square":
             self.size, self.health, self.max_health, self.color = 40, 100, 100, YELLOW
@@ -398,9 +447,20 @@ class Shape:
             self.size, self.health, self.max_health, self.color = 80, 300, 300, BLUE
 
         self.alive = True
+        self.update_points()  # Initialize the points after setting the size
 
     def update(self):
         self.angle += self.rotation_speed * self.rotation_direction
+        self.update_points()
+
+    def update_points(self):
+        self.points = []
+        if self.shape_type == "pentagon":
+            for i in range(5):
+                angle = self.angle + (math.pi * 2 * i / 5)
+                point_x = self.world_x + math.cos(angle) * self.size // 2
+                point_y = self.world_y + math.sin(angle) * self.size // 2
+                self.points.append((point_x, point_y))
 
     def draw(self, tank):
         if not self.alive:
@@ -413,20 +473,17 @@ class Shape:
             top_left_x = screen_x - self.size // 2
             top_left_y = screen_y - self.size // 2
             pygame.draw.rect(screen, self.color, (top_left_x, top_left_y, self.size, self.size))
-        else:
+        elif self.shape_type == "triangle":
             points = []
-            num_sides = 3 if self.shape_type == "triangle" else 5
-            peak_angle = -math.pi / 2
-            peak_x = screen_x + math.cos(peak_angle) * self.size // 2
-            peak_y = screen_y + math.sin(peak_angle) * self.size // 2
-
-            for i in range(num_sides):
-                angle = self.angle + (math.pi * 2 * i / num_sides)
-                point_x = peak_x + math.cos(angle) * self.size // 2
-                point_y = peak_y + math.sin(angle) * self.size // 2
+            for i in range(3):
+                angle = self.angle + (math.pi * 2 * i / 3)
+                point_x = screen_x + math.cos(angle) * self.size // 2
+                point_y = screen_y + math.sin(angle) * self.size // 2
                 points.append((point_x, point_y))
-
             pygame.draw.polygon(screen, self.color, points)
+        elif self.shape_type == "pentagon":
+            screen_points = [(x - tank.world_x + tank.x, y - tank.world_y + tank.y) for x, y in self.points]
+            pygame.draw.polygon(screen, self.color, screen_points)
 
         # Draw health bar only if health is below max
         if self.health < self.max_health:
@@ -446,6 +503,22 @@ class Shape:
                 health_bar_width,
                 health_bar_height
             ), 1)
+
+    def point_inside_polygon(self, x, y):
+        n = len(self.points)
+        inside = False
+        p1x, p1y = self.points[0]
+        for i in range(n + 1):
+            p2x, p2y = self.points[i % n]
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+        return inside
 
     def take_damage(self, damage):
         self.health -= damage
@@ -535,7 +608,7 @@ def draw_world_border(tank):
         pygame.draw.rect(screen, GRAY,
                          (screen_x + WORLD_WIDTH, 0, SCREEN_WIDTH - (screen_x + WORLD_WIDTH), SCREEN_HEIGHT))
 
-def draw_minimap(tank, shapes):
+def draw_minimap(tank, shapes, enemies):
     # Define the position of the minimap on the screen (bottom right)
     minimap_x = SCREEN_WIDTH - MINIMAP_WIDTH - 10  # 10px margin from right edge
     minimap_y = SCREEN_HEIGHT - MINIMAP_HEIGHT - 10  # 10px margin from bottom edge
@@ -567,6 +640,13 @@ def draw_minimap(tank, shapes):
             elif shape.shape_type == "pentagon":
                 pygame.draw.circle(screen, shape.color, (shape_minimap_x, shape_minimap_y), 3)  # Small circle
 
+    # Draw the enemy tanks on the minimap
+    for enemy in enemies:
+        if enemy.alive:
+            enemy_minimap_x = minimap_x + int(enemy.world_x * MINIMAP_SCALE)
+            enemy_minimap_y = minimap_y + int(enemy.world_y * MINIMAP_SCALE)
+            pygame.draw.circle(screen, RED, (enemy_minimap_x, enemy_minimap_y), 3)  # Small red dot for enemies
+
 def draw_minimap_indicator(minimap_visible):
     font = pygame.font.SysFont(None, 24)
     indicator_text = "Minimap: ON" if minimap_visible else "Minimap: OFF"
@@ -597,11 +677,18 @@ def initialize_shapes():
         shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "pentagon"))
     return shapes
 
+
 def game_loop():
     global game_over, killer_object
+
+    # Show menu and get player choice
+    include_enemies = draw_menu(screen, clock)
+    if include_enemies is None:  # Player closed the window
+        return
+
     tank = Tank()
     shapes = initialize_shapes()
-    enemies = initialize_enemies()
+    enemies = initialize_enemies() if include_enemies else []
     running = True
     minimap_visible = True
     game_over = False
@@ -636,15 +723,16 @@ def game_loop():
             for shape in shapes:
                 shape.update()
 
-            # Update and handle dead enemies
-            for enemy in enemies[:]:
-                if enemy.alive:
-                    enemy.update(tank)
-                else:
-                    enemies.remove(enemy)  # Remove dead enemies from the list
+            # Update and handle enemies only if they're included
+            if include_enemies:
+                for enemy in enemies[:]:
+                    if enemy.alive:
+                        enemy.update(tank)
+                    else:
+                        enemies.remove(enemy)
 
-            # Handle collisions
-            tank.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
+                tank.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
+
             tank.check_collision_with_shapes(shapes)
 
             for bullet in tank.bullets[:]:
@@ -653,17 +741,19 @@ def game_loop():
                     tank.bullets.remove(bullet)
                 elif bullet.check_collision(shapes):
                     tank.bullets.remove(bullet)
-                elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive]):
+                elif include_enemies and bullet.check_collision_with_enemies(
+                        [enemy for enemy in enemies if enemy.alive]):
                     tank.bullets.remove(bullet)
 
-            for enemy in enemies[:]:
-                if enemy.alive:
-                    for bullet in enemy.bullets[:]:
-                        bullet.update()
-                        if bullet.off_screen():
-                            enemy.bullets.remove(bullet)
-                        elif bullet.check_collision_with_tank(tank):
-                            enemy.bullets.remove(bullet)
+            if include_enemies:
+                for enemy in enemies:
+                    if enemy.alive:
+                        for bullet in enemy.bullets[:]:
+                            bullet.update()
+                            if bullet.off_screen():
+                                enemy.bullets.remove(bullet)
+                            elif bullet.check_collision_with_tank(tank):
+                                enemy.bullets.remove(bullet)
 
         # Drawing
         draw_grid(tank)
@@ -672,18 +762,19 @@ def game_loop():
         for shape in shapes:
             shape.draw(tank)
 
-        for enemy in enemies:
-            if enemy.alive:
-                enemy.draw(tank)
-                for bullet in enemy.bullets:
-                    bullet.draw(tank)
+        if include_enemies:
+            for enemy in enemies:
+                if enemy.alive:
+                    enemy.draw(tank)
+                    for bullet in enemy.bullets:
+                        bullet.draw(tank)
 
         tank.draw()
         for bullet in tank.bullets:
             bullet.draw(tank)
 
         if minimap_visible:
-            draw_minimap(tank, shapes)
+            draw_minimap(tank, shapes, enemies)
 
         draw_autofire_indicator(tank)
         draw_autospin_indicator(tank)
@@ -701,6 +792,11 @@ def game_loop():
 
     pygame.quit()
 
+
 # Main game execution
 if __name__ == "__main__":
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+    pygame.display.set_caption("Diep.io")
+    clock = pygame.time.Clock()
     game_loop()
