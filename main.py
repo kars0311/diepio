@@ -205,7 +205,6 @@ class Enemy:
                 enemy.world_x -= math.cos(angle) * push_distance / 2
                 enemy.world_y -= math.sin(angle) * push_distance / 2
 
-
 class Tank:
     def __init__(self):
         self.x = SCREEN_WIDTH // 2
@@ -393,7 +392,6 @@ class Tank:
                         shape.world_x -= math.cos(angle) * push_distance / 2
                         shape.world_y -= math.sin(angle) * push_distance / 2
 
-
 class Bullet:
     def __init__(self, x, y, vel_x, vel_y, tankNum):
         self.world_x = x
@@ -469,6 +467,36 @@ class Bullet:
                 if distance < self.radius + other_bullet.radius:
                     return other_bullet
         return None
+
+    def create_collision_effect(self):
+        return BulletCollisionEffect(self.world_x, self.world_y, self.color)
+
+class BulletCollisionEffect:
+    def __init__(self, x, y, color):
+        self.world_x = x
+        self.world_y = y
+        self.color = color
+        self.radius = 5
+        self.max_radius = 30
+        self.growth_rate = 2
+        self.fade_rate = 10
+        self.alpha = 255
+
+    def update(self):
+        self.radius = min(self.radius + self.growth_rate, self.max_radius)
+        self.alpha = max(0, self.alpha - self.fade_rate)
+
+    def draw(self, tank):
+        screen_x = int(self.world_x - tank.world_x + tank.x)
+        screen_y = int(self.world_y - tank.world_y + tank.y)
+
+        if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
+            surface = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(surface, (*self.color, self.alpha), (self.radius, self.radius), self.radius)
+            screen.blit(surface, (screen_x - self.radius, screen_y - self.radius))
+
+    def is_finished(self):
+        return self.alpha <= 0
 
 def initialize_enemies():
     enemies = []
@@ -584,7 +612,6 @@ class Shape:
         # Mark the shape as alive
         self.alive = True
 
-
 def draw_autofire_indicator(tank):
     font = pygame.font.SysFont(None, 24)
     autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
@@ -598,7 +625,6 @@ def draw_autospin_indicator(tank):
     autospin_color = GREEN if tank.autospin else RED
     text_surface = font.render(autospin_text, True, autospin_color)
     screen.blit(text_surface, (10, 40))
-
 # Draw the grid-based terrain
 def draw_grid(tank):
     cols = SCREEN_WIDTH // TILE_SIZE + 2  # Number of tiles needed to fill the width
@@ -718,7 +744,6 @@ def draw_minimap_indicator(mode):
 
     screen.blit(text_surface, (indicator_x, indicator_y))
 
-
 def initialize_shapes():
     shapes = [
         Shape(1000, 1000, "square"),
@@ -730,7 +755,6 @@ def initialize_shapes():
         shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "triangle"))
         shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "pentagon"))
     return shapes
-
 
 def game_loop():
     global game_over, killer_object
@@ -748,7 +772,7 @@ def game_loop():
     game_over = False
     start_time = time.time()
     killer_object = ""
-
+    collision_effects = []
     while running:
         screen.fill(GRAY)
 
@@ -811,17 +835,21 @@ def game_loop():
 
             for bullet in tank.bullets[:]:
                 bullet.update()
+                collision_happened = False
                 if bullet.off_screen():
-                    tank.bullets.remove(bullet)
+                    collision_happened = True
                 elif bullet.check_collision(shapes):
-                    tank.bullets.remove(bullet)
+                    collision_happened = True
                 elif include_enemies:
                     enemy_bullet = bullet.check_collision_with_bullets([b for e in enemies for b in e.bullets])
                     if enemy_bullet:
-                        tank.bullets.remove(bullet)
+                        collision_happened = True
                         enemy_bullet.lifespan = 0  # Mark enemy bullet for removal
                     elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive]):
-                        tank.bullets.remove(bullet)
+                        collision_happened = True
+                if collision_happened:
+                    collision_effects.append(bullet.create_collision_effect())
+                    tank.bullets.remove(bullet)
 
             if include_enemies:
                 for enemy in enemies:
@@ -829,16 +857,23 @@ def game_loop():
                         enemy.check_collision_with_enemies(enemies)
                         for bullet in enemy.bullets[:]:
                             bullet.update()
+                            collision_happened = False
                             if bullet.off_screen() or bullet.lifespan <= 0:
-                                enemy.bullets.remove(bullet)
+                                collision_happened = True
                             else:
                                 player_bullet = bullet.check_collision_with_bullets(tank.bullets)
                                 if player_bullet:
-                                    enemy.bullets.remove(bullet)
+                                    collision_happened = True
                                     player_bullet.lifespan = 0  # Mark player bullet for removal
                                 elif bullet.check_collision_with_tank(tank):
-                                    enemy.bullets.remove(bullet)
+                                    collision_happened = True
 
+                            if collision_happened:
+                                collision_effects.append(bullet.create_collision_effect())
+                                enemy.bullets.remove(bullet)
+
+        for effect in collision_effects:
+            effect.draw(tank)
         # Drawing
         draw_grid(tank)
         draw_world_border(tank)
@@ -852,6 +887,12 @@ def game_loop():
                     enemy.draw(tank)
                     for bullet in enemy.bullets:
                         bullet.draw(tank)
+
+        for effect in collision_effects[:]:
+            effect.update()
+            effect.draw(tank)
+            if effect.is_finished():
+                collision_effects.remove(effect)
 
         tank.draw()
         for bullet in tank.bullets:
