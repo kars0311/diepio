@@ -183,7 +183,7 @@ class Enemy:
     def shoot(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
         bullet_y = self.world_y + math.sin(self.angle) * self.size
-        bullet_speed = 4
+        bullet_speed = 8
         bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 1)
         self.bullets.append(bullet)
 
@@ -316,7 +316,7 @@ class Tank:
         if self.shoot_cooldown <= 0:
             bullet_x = self.world_x + math.cos(self.angle) * self.size
             bullet_y = self.world_y + math.sin(self.angle) * self.size
-            bullet_speed = 5
+            bullet_speed = 10
             bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 0)
             self.bullets.append(bullet)
 
@@ -773,6 +773,7 @@ def game_loop():
     start_time = time.time()
     killer_object = ""
     collision_effects = []
+
     while running:
         screen.fill(GRAY)
 
@@ -804,7 +805,7 @@ def game_loop():
             if include_enemies:
                 for enemy in enemies[:]:
                     if enemy.alive:
-                        enemy.update(tank, shapes)  # Pass shapes argument here
+                        enemy.update(tank, shapes)
                     else:
                         enemies.remove(enemy)
 
@@ -812,16 +813,30 @@ def game_loop():
 
             tank.check_collision_with_shapes(shapes)
 
+            # Handle player bullets
             for bullet in tank.bullets[:]:
                 bullet.update()
                 if bullet.off_screen():
+                    collision_effects.append(bullet.create_collision_effect())
                     tank.bullets.remove(bullet)
                 elif bullet.check_collision(shapes):
+                    collision_effects.append(bullet.create_collision_effect())
                     tank.bullets.remove(bullet)
-                elif include_enemies and bullet.check_collision_with_enemies(
-                        [enemy for enemy in enemies if enemy.alive]):
-                    tank.bullets.remove(bullet)
+                elif include_enemies:
+                    enemy_bullet = bullet.check_collision_with_bullets([b for e in enemies for b in e.bullets])
+                    if enemy_bullet:
+                        collision_effects.append(bullet.create_collision_effect())
+                        collision_effects.append(enemy_bullet.create_collision_effect())
+                        tank.bullets.remove(bullet)
+                        for enemy in enemies:
+                            if enemy_bullet in enemy.bullets:
+                                enemy.bullets.remove(enemy_bullet)
+                                break
+                    elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive]):
+                        collision_effects.append(bullet.create_collision_effect())
+                        tank.bullets.remove(bullet)
 
+            # Handle enemy bullets
             if include_enemies:
                 for enemy in enemies:
                     if enemy.alive:
@@ -829,51 +844,19 @@ def game_loop():
                         for bullet in enemy.bullets[:]:
                             bullet.update()
                             if bullet.off_screen():
+                                collision_effects.append(bullet.create_collision_effect())
                                 enemy.bullets.remove(bullet)
-                            elif bullet.check_collision_with_tank(tank):
-                                enemy.bullets.remove(bullet)
-
-            for bullet in tank.bullets[:]:
-                bullet.update()
-                collision_happened = False
-                if bullet.off_screen():
-                    collision_happened = True
-                elif bullet.check_collision(shapes):
-                    collision_happened = True
-                elif include_enemies:
-                    enemy_bullet = bullet.check_collision_with_bullets([b for e in enemies for b in e.bullets])
-                    if enemy_bullet:
-                        collision_happened = True
-                        enemy_bullet.lifespan = 0  # Mark enemy bullet for removal
-                    elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive]):
-                        collision_happened = True
-                if collision_happened:
-                    collision_effects.append(bullet.create_collision_effect())
-                    tank.bullets.remove(bullet)
-
-            if include_enemies:
-                for enemy in enemies:
-                    if enemy.alive:
-                        enemy.check_collision_with_enemies(enemies)
-                        for bullet in enemy.bullets[:]:
-                            bullet.update()
-                            collision_happened = False
-                            if bullet.off_screen() or bullet.lifespan <= 0:
-                                collision_happened = True
                             else:
                                 player_bullet = bullet.check_collision_with_bullets(tank.bullets)
                                 if player_bullet:
-                                    collision_happened = True
-                                    player_bullet.lifespan = 0  # Mark player bullet for removal
+                                    collision_effects.append(bullet.create_collision_effect())
+                                    collision_effects.append(player_bullet.create_collision_effect())
+                                    enemy.bullets.remove(bullet)
+                                    tank.bullets.remove(player_bullet)
                                 elif bullet.check_collision_with_tank(tank):
-                                    collision_happened = True
+                                    collision_effects.append(bullet.create_collision_effect())
+                                    enemy.bullets.remove(bullet)
 
-                            if collision_happened:
-                                collision_effects.append(bullet.create_collision_effect())
-                                enemy.bullets.remove(bullet)
-
-        for effect in collision_effects:
-            effect.draw(tank)
         # Drawing
         draw_grid(tank)
         draw_world_border(tank)
