@@ -721,6 +721,7 @@ def death_screen(screen, clock, killer_object, survival_time, final_score):
     button_x = SCREEN_WIDTH // 2 - button_width // 2
     button_y = SCREEN_HEIGHT // 2 + 150
     button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+    button_collision_rect = pygame.Rect(button_x, button_y+50, button_width, button_height)
     button_text = font_small.render("Continue", True, BLACK)
     button_text_rect = button_text.get_rect(center=button_rect.center)
 
@@ -742,7 +743,7 @@ def death_screen(screen, clock, killer_object, survival_time, final_score):
 
         # Change button color when hovered
         mouse_pos = pygame.mouse.get_pos()
-        if button_rect.collidepoint(mouse_pos):
+        if button_collision_rect.collidepoint(mouse_pos):
             button_color = (200, 200, 200)  # Light gray when hovered
         else:
             button_color = WHITE
