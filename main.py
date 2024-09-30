@@ -368,7 +368,10 @@ class Tank:
             self.health = 0
             global game_over, killer_object
             game_over = True
-            killer_object = attacker if attacker else "Unknown"
+            if isinstance(attacker, Shape):
+                killer_object = attacker.shape_type.capitalize()
+            else:
+                killer_object = attacker if attacker else "Unknown"
         self.regen_cooldown = self.regen_cooldown_max
 
     def check_collision_with_enemies(self, enemies):
@@ -402,7 +405,7 @@ class Tank:
                         point_x = self.world_x + math.cos(math.radians(angle)) * self.size
                         point_y = self.world_y + math.sin(math.radians(angle)) * self.size
                         if shape.point_inside_polygon(point_x, point_y):
-                            self.take_damage(5, "Shape")
+                            self.take_damage(5, shape)  # Pass the shape object
                             shape.take_damage(5)
                             # Push the tank away from the pentagon
                             angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
@@ -412,7 +415,7 @@ class Tank:
                 else:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
-                        self.take_damage(5, "Shape")
+                        self.take_damage(5, shape)  # Pass the shape object
                         shape.take_damage(5)
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
@@ -674,8 +677,9 @@ def format_time(seconds):
     minutes, seconds = divmod(int(seconds), 60)
     return f"{minutes:02d}:{seconds:02d}"
 
+
 def death_screen(screen, clock, killer_object, survival_time):
-    transparent_surface = pygame.Surface((SCREEN_WIDTH+20, SCREEN_HEIGHT), pygame.SRCALPHA)
+    transparent_surface = pygame.Surface((SCREEN_WIDTH + 20, SCREEN_HEIGHT), pygame.SRCALPHA)
     transparent_surface.fill((100, 100, 100, 200))
 
     font_large = pygame.font.Font(None, 74)
@@ -683,7 +687,15 @@ def death_screen(screen, clock, killer_object, survival_time):
     font_small = pygame.font.Font(None, 36)
 
     death_text = font_large.render("YOU DIED", True, RED)
-    killer_text = font_medium.render(f"Killed by: {killer_object}", True, WHITE)
+
+    # Modify the killer text to be more specific for shapes
+    if killer_object == "Shape":
+        killer_text = font_medium.render(f"Killed by: Unknown Shape", True, WHITE)
+    elif killer_object in ["Pentagon", "Triangle", "Square"]:
+        killer_text = font_medium.render(f"Killed by: {killer_object}", True, WHITE)
+    else:
+        killer_text = font_medium.render(f"Killed by: {killer_object}", True, WHITE)
+
     time_text = font_medium.render(f"Survival time: {format_time(survival_time)}", True, WHITE)
 
     button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 100, 200, 50)
