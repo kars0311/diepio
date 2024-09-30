@@ -732,7 +732,7 @@ def death_screen(screen, clock, killer_object, survival_time, final_score):
                 exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
-                    if button_rect.collidepoint(event.pos):
+                    if button_collision_rect.collidepoint(event.pos):
                         return
 
         screen.blit(transparent_surface, (0, 0))
