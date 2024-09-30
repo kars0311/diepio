@@ -82,6 +82,10 @@ class Enemy:
         self.max_health = 500
         self.alive = True
         self.target = None
+        # New attributes for barrel recoil
+        self.barrel_recoil = 0
+        self.max_barrel_recoil = 10
+        self.barrel_recoil_speed = 1
 
     def draw(self, tank):
         if not self.alive:
@@ -90,9 +94,12 @@ class Enemy:
         screen_x = self.world_x - tank.world_x + tank.x
         screen_y = self.world_y - tank.world_y + tank.y
 
-        # Draw cannon
-        cannon_end_x = screen_x + math.cos(self.angle) * self.cannon_length
-        cannon_end_y = screen_y + math.sin(self.angle) * self.cannon_length
+        # Calculate recoil-adjusted cannon length
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil
+
+        # Draw cannon with recoil
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
         perpendicular_angle = self.angle + math.pi / 2
         half_thickness = self.cannon_thickness / 2
         corner_offset_x = math.cos(perpendicular_angle) * half_thickness
@@ -163,6 +170,10 @@ class Enemy:
             if bullet.off_screen():
                 self.bullets.remove(bullet)
 
+        # Update barrel recoil
+        if self.barrel_recoil > 0:
+            self.barrel_recoil = max(0, self.barrel_recoil - self.barrel_recoil_speed)
+
     def target_player(self, tank):
         self.target = (tank.world_x, tank.world_y)
 
@@ -186,6 +197,9 @@ class Enemy:
         bullet_speed = 8
         bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 1)
         self.bullets.append(bullet)
+
+        # Apply barrel recoil
+        self.barrel_recoil = self.max_barrel_recoil
 
     def take_damage(self, damage):
         self.health -= damage
@@ -230,11 +244,18 @@ class Tank:
         self.regen_rate = 0.1
         self.regen_cooldown = 0
         self.regen_cooldown_max = 180
+        # New attributes for barrel recoil
+        self.barrel_recoil = 0
+        self.max_barrel_recoil = 10
+        self.barrel_recoil_speed = 1
 
     def draw(self):
-        # Draw cannon
-        cannon_end_x = self.x + math.cos(self.angle) * self.cannon_length
-        cannon_end_y = self.y + math.sin(self.angle) * self.cannon_length
+        # Calculate recoil-adjusted cannon length
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil
+
+        # Draw cannon with recoil
+        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
         perpendicular_angle = self.angle + math.pi / 2
         half_thickness = self.cannon_thickness / 2
         corner_offset_x = math.cos(perpendicular_angle) * half_thickness
@@ -305,6 +326,10 @@ class Tank:
             else:
                 self.health = min(self.max_health, self.health + self.regen_rate)
 
+        # Update barrel recoil
+        if self.barrel_recoil > 0:
+            self.barrel_recoil = max(0, self.barrel_recoil - self.barrel_recoil_speed)
+
     def rotate_to_mouse(self, mouse_pos):
         if self.autospin:
             self.angle += 0.05
@@ -317,13 +342,17 @@ class Tank:
             bullet_x = self.world_x + math.cos(self.angle) * self.size
             bullet_y = self.world_y + math.sin(self.angle) * self.size
             bullet_speed = 10
-            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 0)
+            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed,
+                            math.sin(self.angle) * bullet_speed, 0)
             self.bullets.append(bullet)
 
             # Apply recoil
             recoil_force = 0.2
             self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
             self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
+
+            # Apply barrel recoil
+            self.barrel_recoil = self.max_barrel_recoil
 
             self.shoot_cooldown = 15
 
