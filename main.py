@@ -224,6 +224,7 @@ class Tank:
         self.x = SCREEN_WIDTH // 2
         self.y = SCREEN_HEIGHT // 2
         self.size = 40
+        self.score=0
         self.speed = 5
         self.angle = 0
         self.color = AQUA
@@ -400,14 +401,12 @@ class Tank:
         for shape in shapes:
             if shape.alive:
                 if shape.shape_type == "pentagon":
-                    # Check if any of the tank's edge points are inside the pentagon
-                    for angle in range(0, 360, 30):  # Check 12 points around the tank
+                    for angle in range(0, 360, 30):
                         point_x = self.world_x + math.cos(math.radians(angle)) * self.size
                         point_y = self.world_y + math.sin(math.radians(angle)) * self.size
                         if shape.point_inside_polygon(point_x, point_y):
-                            self.take_damage(5, shape)  # Pass the shape object
-                            shape.take_damage(5)
-                            # Push the tank away from the pentagon
+                            self.take_damage(5, shape)
+                            shape.take_damage(5, self)  # Pass self (tank) here
                             angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                             self.world_x += math.cos(angle) * 5
                             self.world_y += math.sin(angle) * 5
@@ -415,8 +414,8 @@ class Tank:
                 else:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
-                        self.take_damage(5, shape)  # Pass the shape object
-                        shape.take_damage(5)
+                        self.take_damage(5, shape)
+                        shape.take_damage(5, self)  # Pass self (tank) here
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
                         self.world_x += math.cos(angle) * push_distance / 2
@@ -463,17 +462,17 @@ class Bullet:
                 self.world_y < 0 or self.world_y > WORLD_HEIGHT or
                 self.lifespan <= 0)
 
-    def check_collision(self, shapes):
+    def check_collision(self, shapes, tank):
         for shape in shapes:
             if shape.alive:
                 if shape.shape_type == "pentagon":
                     if shape.point_inside_polygon(self.world_x, self.world_y):
-                        shape.take_damage(self.damage)
+                        shape.take_damage(self.damage, tank)
                         return True
                 else:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.radius + shape.size // 2:
-                        shape.take_damage(self.damage)
+                        shape.take_damage(self.damage, tank)
                         return True
         return False
 
@@ -629,10 +628,18 @@ class Shape:
             p1x, p1y = p2x, p2y
         return inside
 
-    def take_damage(self, damage):
+    def take_damage(self, damage, tank=None):
         self.health -= damage
         if self.health <= 0:
+            if tank:  # Only increase score if tank is provided
+                if self.shape_type == "square":
+                    tank.score += 10
+                elif self.shape_type == "triangle":
+                    tank.score += 25
+                elif self.shape_type == "pentagon":
+                    tank.score += 130
             self.regenerate()
+
     def regenerate(self):
         # Move the shape to a new random location in the world
         self.world_x = random.randint(100, WORLD_WIDTH - 100)
@@ -643,6 +650,13 @@ class Shape:
 
         # Mark the shape as alive
         self.alive = True
+
+def draw_score(screen, score):
+    font = pygame.font.SysFont(None, 36)
+    score_text = font.render(f"Score: {score}", True, BLACK)
+    score_rect = score_text.get_rect()
+    score_rect.topright = (SCREEN_WIDTH - 10, 10)
+    screen.blit(score_text, score_rect)
 
 def draw_autofire_indicator(tank):
     font = pygame.font.SysFont(None, 24)
@@ -678,8 +692,8 @@ def format_time(seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 
-def death_screen(screen, clock, killer_object, survival_time):
-    transparent_surface = pygame.Surface((SCREEN_WIDTH + 20, SCREEN_HEIGHT), pygame.SRCALPHA)
+def death_screen(screen, clock, killer_object, survival_time, final_score):
+    transparent_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     transparent_surface.fill((100, 100, 100, 200))
 
     font_large = pygame.font.Font(None, 74)
@@ -687,19 +701,28 @@ def death_screen(screen, clock, killer_object, survival_time):
     font_small = pygame.font.Font(None, 36)
 
     death_text = font_large.render("YOU DIED", True, RED)
+    death_rect = death_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 150))
 
-    # Modify the killer text to be more specific for shapes
     if killer_object == "Shape":
         killer_text = font_medium.render(f"Killed by: Unknown Shape", True, WHITE)
     elif killer_object in ["Pentagon", "Triangle", "Square"]:
         killer_text = font_medium.render(f"Killed by: {killer_object}", True, WHITE)
     else:
         killer_text = font_medium.render(f"Killed by: {killer_object}", True, WHITE)
+    killer_rect = killer_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
 
     time_text = font_medium.render(f"Survival time: {format_time(survival_time)}", True, WHITE)
+    time_rect = time_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 25))
 
-    button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 100, 200, 50)
+    score_text = font_medium.render(f"Final Score: {final_score}", True, WHITE)
+    score_rect = score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 75))
+
+    button_width, button_height = 200, 50
+    button_x = SCREEN_WIDTH // 2 - button_width // 2
+    button_y = SCREEN_HEIGHT // 2 + 150
+    button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
     button_text = font_small.render("Continue", True, BLACK)
+    button_text_rect = button_text.get_rect(center=button_rect.center)
 
     while True:
         for event in pygame.event.get():
@@ -707,19 +730,30 @@ def death_screen(screen, clock, killer_object, survival_time):
                 pygame.quit()
                 exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if button_rect.collidepoint(event.pos):
-                    return
+                if event.button == 1:  # Left mouse button
+                    if button_rect.collidepoint(event.pos):
+                        return
 
         screen.blit(transparent_surface, (0, 0))
-        screen.blit(death_text, death_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100)))
-        screen.blit(killer_text, killer_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
-        screen.blit(time_text, time_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50)))
+        screen.blit(death_text, death_rect)
+        screen.blit(killer_text, killer_rect)
+        screen.blit(time_text, time_rect)
+        screen.blit(score_text, score_rect)
 
-        pygame.draw.rect(screen, WHITE, button_rect)
-        screen.blit(button_text, button_text.get_rect(center=button_rect.center))
+        # Change button color when hovered
+        mouse_pos = pygame.mouse.get_pos()
+        if button_rect.collidepoint(mouse_pos):
+            button_color = (200, 200, 200)  # Light gray when hovered
+        else:
+            button_color = WHITE
+
+        pygame.draw.rect(screen, button_color, button_rect)
+        pygame.draw.rect(screen, BLACK, button_rect, 2)  # Button border
+        screen.blit(button_text, button_text_rect)
 
         pygame.display.flip()
         clock.tick(60)
+
 
 def draw_world_border(tank):
     screen_x = tank.x - tank.world_x
@@ -860,7 +894,7 @@ def game_loop():
                 if bullet.off_screen():
                     collision_effects.append(bullet.create_collision_effect())
                     tank.bullets.remove(bullet)
-                elif bullet.check_collision(shapes):
+                elif bullet.check_collision(shapes, tank):  # Pass tank here
                     collision_effects.append(bullet.create_collision_effect())
                     tank.bullets.remove(bullet)
                 elif include_enemies:
@@ -901,6 +935,8 @@ def game_loop():
         # Drawing
         draw_grid(tank)
         draw_world_border(tank)
+        draw_score(screen, tank.score)
+
 
         for shape in shapes:
             shape.draw(tank)
@@ -934,9 +970,10 @@ def game_loop():
 
         if game_over:
             survival_time = time.time() - start_time
-            death_screen(screen, clock, killer_object, survival_time)
+            death_screen(screen, clock, killer_object, survival_time, tank.score)
             game_over = False
             tank.respawn()
+            tank.score = 0  # Reset score on respawn
             start_time = time.time()
 
     pygame.quit()
