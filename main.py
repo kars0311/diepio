@@ -693,7 +693,7 @@ def format_time(seconds):
 
 
 def death_screen(screen, clock, killer_object, survival_time, final_score):
-    transparent_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    transparent_surface = pygame.Surface((SCREEN_WIDTH+20, SCREEN_HEIGHT), pygame.SRCALPHA)
     transparent_surface.fill((100, 100, 100, 200))
 
     font_large = pygame.font.Font(None, 74)
@@ -721,7 +721,7 @@ def death_screen(screen, clock, killer_object, survival_time, final_score):
     button_x = SCREEN_WIDTH // 2 - button_width // 2
     button_y = SCREEN_HEIGHT // 2 + 150
     button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
-    button_collision_rect = pygame.Rect(button_x, button_y+50, button_width, button_height)
+    button_collision_rect = pygame.Rect(button_x, button_y, button_width, button_height)
     button_text = font_small.render("Continue", True, BLACK)
     button_text_rect = button_text.get_rect(center=button_rect.center)
 
