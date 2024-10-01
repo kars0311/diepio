@@ -82,38 +82,67 @@ class Enemy:
         self.max_health = 500
         self.alive = True
         self.target = None
-        # New attributes for barrel recoil
-        self.barrel_recoil = 0
         self.max_barrel_recoil = 10
         self.barrel_recoil_speed = 1
+        self.tank_type = random.choice(["basic", "twin"])
+        if self.tank_type == "twin":
+            self.cannon_separation = self.size * 1.0
+            self.cannon_length = 80
+            self.next_cannon = 1
+            self.barrel_recoil = [0, 0]  # Separate recoil for each barrel
+        else:
+            self.barrel_recoil = [0]  # Single recoil for basic tank
 
     def draw(self, tank):
+
         if not self.alive:
-            return  # Don't draw dead enemies
+            return
 
         screen_x = self.world_x - tank.world_x + tank.x
         screen_y = self.world_y - tank.world_y + tank.y
 
-        # Calculate recoil-adjusted cannon length
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil
+        if self.tank_type == "basic":
+            # Draw single cannon
+            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+            cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+            cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+            perpendicular_angle = self.angle + math.pi / 2
+            half_thickness = self.cannon_thickness / 2
+            corner_offset_x = math.cos(perpendicular_angle) * half_thickness
+            corner_offset_y = math.sin(perpendicular_angle) * half_thickness
+            cannon_corners = [
+                (screen_x + corner_offset_x, screen_y + corner_offset_y),
+                (screen_x - corner_offset_x, screen_y - corner_offset_y),
+                (cannon_end_x - corner_offset_x, cannon_end_y - corner_offset_y),
+                (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
+            ]
+            pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
 
-        # Draw cannon with recoil
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        perpendicular_angle = self.angle + math.pi / 2
-        half_thickness = self.cannon_thickness / 2
-        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
-        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
-        cannon_corners = [
-            (screen_x + corner_offset_x, screen_y + corner_offset_y),
-            (screen_x - corner_offset_x, screen_y - corner_offset_y),
-            (cannon_end_x - corner_offset_x, cannon_end_y - corner_offset_y),
-            (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
-        ]
-        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+        else:  # Twin cannon
+            for i in [-1, 1]:  # Draw two cannons
+                recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
+                cannon_start_x = screen_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2
+                cannon_start_y = screen_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2
 
-        # Draw enemy body
-        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
+                # Adjust the start point of the cannon to be tangent to the tank's body
+                cannon_start_x -= math.cos(self.angle) * self.size * 0.1
+                cannon_start_y -= math.sin(self.angle) * self.size * 0.1
+
+                cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+                cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+
+                perpendicular_angle = self.angle + math.pi / 2
+                half_thickness = self.cannon_thickness / 2
+                corner_offset_x = math.cos(perpendicular_angle) * half_thickness
+                corner_offset_y = math.sin(perpendicular_angle) * half_thickness
+
+                cannon_corners = [
+                    (cannon_start_x + corner_offset_x, cannon_start_y + corner_offset_y),
+                    (cannon_start_x - corner_offset_x, cannon_start_y - corner_offset_y),
+                    (cannon_end_x - corner_offset_x, cannon_end_y - corner_offset_y),
+                    (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
+                ]
+                pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
 
         # Draw health bar only if health is below max
         if self.health < self.max_health:
@@ -133,6 +162,33 @@ class Enemy:
                 health_bar_width,
                 health_bar_height
             ), 1)
+            # Draw enemy body
+        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
+
+    def shoot(self):
+        if self.tank_type == "basic":
+            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+            bullet_x = self.world_x + math.cos(self.angle) * self.size
+            bullet_y = self.world_y + math.sin(self.angle) * self.size
+            bullet_speed = 8
+            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed,
+                            math.sin(self.angle) * bullet_speed, 1)
+            self.bullets.append(bullet)
+            self.barrel_recoil[0] = self.max_barrel_recoil
+        elif self.tank_type == "twin":  # Twin cannon
+            for i in [-1, 1]:  # Draw two cannons
+                recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
+            i = self.next_cannon
+            bullet_x = self.world_x + i * math.cos(
+                self.angle + math.pi / 2) * self.cannon_separation / 2 + math.cos(self.angle) * self.size * 0.9
+            bullet_y = self.world_y + i * math.sin(
+                self.angle + math.pi / 2) * self.cannon_separation / 2 + math.sin(self.angle) * self.size * 0.9
+            bullet_speed = 8
+            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed,
+                            math.sin(self.angle) * bullet_speed, 1)
+            self.bullets.append(bullet)
+            self.barrel_recoil[(i + 1) // 2] = self.max_barrel_recoil
+            self.next_cannon *= -1
 
     def update(self, tank, shapes):
         if not self.alive:
@@ -159,7 +215,10 @@ class Enemy:
         # Shoot at the target
         if self.shoot_cooldown <= 0 and self.target:
             self.shoot()
-            self.shoot_cooldown = 60  # Shoot every second
+            if self.tank_type == "basic":
+                self.shoot_cooldown = 30
+            if self.tank_type == "twin":
+                self.shoot_cooldown = 10  # Reduced cooldown for more frequent shots
 
         if self.shoot_cooldown > 0:
             self.shoot_cooldown -= 1
@@ -171,8 +230,9 @@ class Enemy:
                 self.bullets.remove(bullet)
 
         # Update barrel recoil
-        if self.barrel_recoil > 0:
-            self.barrel_recoil = max(0, self.barrel_recoil - self.barrel_recoil_speed)
+        for i in range(len(self.barrel_recoil)):
+            if self.barrel_recoil[i] > 0:
+                self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
 
     def target_player(self, tank):
         self.target = (tank.world_x, tank.world_y)
@@ -190,16 +250,6 @@ class Enemy:
             self.target = (nearest_shape.world_x, nearest_shape.world_y)
         else:
             self.target = None
-
-    def shoot(self):
-        bullet_x = self.world_x + math.cos(self.angle) * self.size
-        bullet_y = self.world_y + math.sin(self.angle) * self.size
-        bullet_speed = 8
-        bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed, math.sin(self.angle) * bullet_speed, 1)
-        self.bullets.append(bullet)
-
-        # Apply barrel recoil
-        self.barrel_recoil = self.max_barrel_recoil
 
     def take_damage(self, damage):
         self.health -= damage
