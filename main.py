@@ -557,37 +557,36 @@ class Shape:
         self.alive = True
         self.update_points()
 
-        # New attributes for movement and collision
-        self.velocity_x = random.uniform(-1, 1)
-        self.velocity_y = random.uniform(-1, 1)
-        self.mass = self.size * self.size  # Mass proportional to size
-        self.restitution = 0.8  # Bounciness factor
+        # New attributes for perpetual circular movement
+        self.orbit_radius = random.randint(25, 50)
+        self.orbit_speed = random.uniform(0.005, 0.02)
+        self.orbit_angle = random.uniform(0, 2 * math.pi)
+        self.center_x = x
+        self.center_y = y
 
     def update(self, shapes):
         if not self.alive:
             return
 
+        # Update rotation
         self.angle += self.rotation_speed * self.rotation_direction
+
+        # Update circular movement
+        self.orbit_angle += self.orbit_speed
+        self.world_x = self.center_x + math.cos(self.orbit_angle) * self.orbit_radius
+        self.world_y = self.center_y + math.sin(self.orbit_angle) * self.orbit_radius
+
         self.update_points()
 
-        # Update position based on velocity
-        self.world_x += self.velocity_x
-        self.world_y += self.velocity_y
+        # Keep shapes within the world bounds
+        self.world_x = max(self.size, min(WORLD_WIDTH - self.size, self.world_x))
+        self.world_y = max(self.size, min(WORLD_HEIGHT - self.size, self.world_y))
 
         # Check for collisions with other shapes
         for other in shapes:
             if other != self and other.alive:
                 if self.check_collision(other):
                     self.resolve_collision(other)
-
-        # Apply slight friction to slow down shapes over time
-        friction = 0.99
-        self.velocity_x *= friction
-        self.velocity_y *= friction
-
-        # Keep shapes within the world bounds
-        self.world_x = max(self.size, min(WORLD_WIDTH - self.size, self.world_x))
-        self.world_y = max(self.size, min(WORLD_HEIGHT - self.size, self.world_y))
 
     def update_points(self):
         self.points = []
@@ -597,6 +596,71 @@ class Shape:
             point_x = self.world_x + math.cos(angle) * self.size // 2
             point_y = self.world_y + math.sin(angle) * self.size // 2
             self.points.append((point_x, point_y))
+
+    def check_collision(self, other):
+        distance = math.sqrt((self.world_x - other.world_x) ** 2 + (self.world_y - other.world_y) ** 2)
+        return distance < (self.size + other.size) / 2
+
+    def resolve_collision(self, other):
+        # Calculate collision normal
+        nx = other.world_x - self.world_x
+        ny = other.world_y - self.world_y
+        d = math.sqrt(nx * nx + ny * ny)
+        nx /= d
+        ny /= d
+
+        # Move shapes apart to prevent sticking
+        overlap = (self.size + other.size) / 2 - d
+        self.world_x -= overlap * nx / 2
+        self.world_y -= overlap * ny / 2
+        other.world_x += overlap * nx / 2
+        other.world_y += overlap * ny / 2
+
+        # Adjust orbit centers after collision
+        self.center_x = self.world_x - math.cos(self.orbit_angle) * self.orbit_radius
+        self.center_y = self.world_y - math.sin(self.orbit_angle) * self.orbit_radius
+        other.center_x = other.world_x - math.cos(other.orbit_angle) * other.orbit_radius
+        other.center_y = other.world_y - math.sin(other.orbit_angle) * other.orbit_radius
+
+    def take_damage(self, damage, tank=None):
+        self.health -= damage
+        if self.health <= 0:
+            if tank:
+                if self.shape_type == "square":
+                    tank.score += 10
+                elif self.shape_type == "triangle":
+                    tank.score += 25
+                elif self.shape_type == "pentagon":
+                    tank.score += 130
+            self.regenerate()
+
+    def regenerate(self):
+        self.world_x = random.randint(100, WORLD_WIDTH - 100)
+        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+        self.center_x = self.world_x
+        self.center_y = self.world_y
+        self.health = self.max_health
+        self.alive = True
+        self.orbit_angle = random.uniform(0, 2 * math.pi)
+
+    def point_inside_polygon(self, x, y):
+        if self.shape_type != "pentagon":
+            return False  # Only pentagons use this method
+
+        n = len(self.points)
+        inside = False
+        p1x, p1y = self.points[0]
+        for i in range(n + 1):
+            p2x, p2y = self.points[i % n]
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+        return inside
 
     def draw(self, tank):
         if not self.alive:
@@ -626,87 +690,6 @@ class Shape:
                 health_bar_width,
                 health_bar_height
             ), 1)
-
-    def check_collision(self, other):
-        distance = math.sqrt((self.world_x - other.world_x)**2 + (self.world_y - other.world_y)**2)
-        return distance < (self.size + other.size) / 2
-
-    def resolve_collision(self, other):
-        # Calculate collision normal
-        nx = other.world_x - self.world_x
-        ny = other.world_y - self.world_y
-        d = math.sqrt(nx*nx + ny*ny)
-        nx /= d
-        ny /= d
-
-        # Calculate relative velocity
-        vx = self.velocity_x - other.velocity_x
-        vy = self.velocity_y - other.velocity_y
-
-        # Calculate relative velocity in terms of the normal direction
-        vn = vx*nx + vy*ny
-
-        # Do not resolve if velocities are separating
-        if vn > 0:
-            return
-
-        # Calculate impulse scalar
-        i = -(1 + self.restitution) * vn
-        i /= 1/self.mass + 1/other.mass
-
-        # Apply impulse
-        impulse_x = i * nx
-        impulse_y = i * ny
-        self.velocity_x -= impulse_x / self.mass
-        self.velocity_y -= impulse_y / self.mass
-        other.velocity_x += impulse_x / other.mass
-        other.velocity_y += impulse_y / other.mass
-
-        # Move shapes apart to prevent sticking
-        overlap = (self.size + other.size) / 2 - d
-        self.world_x -= overlap * nx / 2
-        self.world_y -= overlap * ny / 2
-        other.world_x += overlap * nx / 2
-        other.world_y += overlap * ny / 2
-
-    def take_damage(self, damage, tank=None):
-        self.health -= damage
-        if self.health <= 0:
-            if tank:
-                if self.shape_type == "square":
-                    tank.score += 10
-                elif self.shape_type == "triangle":
-                    tank.score += 25
-                elif self.shape_type == "pentagon":
-                    tank.score += 130
-            self.regenerate()
-
-    def regenerate(self):
-        self.world_x = random.randint(100, WORLD_WIDTH - 100)
-        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
-        self.health = self.max_health
-        self.alive = True
-        self.velocity_x = random.uniform(-1, 1)
-        self.velocity_y = random.uniform(-1, 1)
-
-    def point_inside_polygon(self, x, y):
-        if self.shape_type != "pentagon":
-            return False  # Only pentagons use this method
-
-        n = len(self.points)
-        inside = False
-        p1x, p1y = self.points[0]
-        for i in range(n + 1):
-            p2x, p2y = self.points[i % n]
-            if y > min(p1y, p2y):
-                if y <= max(p1y, p2y):
-                    if x <= max(p1x, p2x):
-                        if p1y != p2y:
-                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xinters:
-                            inside = not inside
-            p1x, p1y = p2x, p2y
-        return inside
 
 def draw_score(screen, score):
     font = pygame.font.SysFont(None, 36)
