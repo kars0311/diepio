@@ -431,8 +431,8 @@ class Bullet:
         self.vel_y = vel_y
         self.radius = 15
         self.color = AQUA
-        self.lifespan = 400
-        self.damage = 25 - (tankNum*15)
+        self.lifespan = 200
+        self.damage = 25 - (tankNum * 15)
         self.tankNum = tankNum  # 0 for player, 1 for enemy
         if tankNum == 0:
             self.color = AQUA
@@ -443,23 +443,23 @@ class Bullet:
         self.world_x += self.vel_x
         self.world_y += self.vel_y
         self.lifespan -= 1
-        if self.world_x - self.radius < 0 or self.world_x + self.radius > screen.get_width():
-            self.world_x += self.vel_x
-            self.world_y += self.vel_y
-            self.lifespan -= 1
-            if self.world_x - self.radius < 0 or self.world_x + self.radius > WORLD_WIDTH:
-                self.vel_x = 0
-            if self.world_y - self.radius < 0 or self.world_y + self.radius > WORLD_HEIGHT:
-                self.vel_y = 0
+
+        # Keep bullets within world bounds
+        self.world_x = max(self.radius, min(WORLD_WIDTH - self.radius, self.world_x))
+        self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
 
     def draw(self, tank):
-        screen_x = self.world_x - tank.world_x + tank.x
-        screen_y = self.world_y - tank.world_y + tank.y
-        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.radius)
+        # Calculate the bullet's position relative to the tank's screen position
+        screen_x = int(self.world_x - tank.world_x + tank.x)
+        screen_y = int(self.world_y - tank.world_y + tank.y)
+
+        # Only draw the bullet if it's within the screen bounds
+        if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
+            pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.radius)
 
     def off_screen(self):
-        return (self.world_x < 0 or self.world_x > WORLD_WIDTH or
-                self.world_y < 0 or self.world_y > WORLD_HEIGHT or
+        return (self.world_x < self.radius or self.world_x > WORLD_WIDTH - self.radius or
+                self.world_y < self.radius or self.world_y > WORLD_HEIGHT - self.radius or
                 self.lifespan <= 0)
 
     def check_collision(self, shapes, tank):
@@ -748,7 +748,6 @@ def format_time(seconds):
     minutes, seconds = divmod(int(seconds), 60)
     return f"{minutes:02d}:{seconds:02d}"
 
-
 def death_screen(screen, clock, killer_object, survival_time, final_score):
     transparent_surface = pygame.Surface((SCREEN_WIDTH+20, SCREEN_HEIGHT), pygame.SRCALPHA)
     transparent_surface.fill((100, 100, 100, 200))
@@ -811,7 +810,6 @@ def death_screen(screen, clock, killer_object, survival_time, final_score):
 
         pygame.display.flip()
         clock.tick(60)
-
 
 def draw_world_border(tank):
     screen_x = tank.x - tank.world_x
