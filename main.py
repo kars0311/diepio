@@ -12,6 +12,11 @@ SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
 TILE_SIZE = 25
 
+# Add these constants at the top of your file
+UPGRADE_BUTTON_WIDTH = 150
+UPGRADE_BUTTON_HEIGHT = 40
+UPGRADE_BUTTON_MARGIN = 10
+
 levels = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45])
 scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 787, 938, 1109, 1301, 1516, 1757, 2026, 2325, 2658, 3026, 3433, 3883, 4379, 4925, 5525, 6184, 6907, 7698, 8537, 9426, 10368, 11367, 12426, 13549, 14739, 16000, 17337, 18754, 20256, 21849, 23536])
 
@@ -399,14 +404,42 @@ class Tank:
         self.regen_cooldown = 0
         self.regen_cooldown_max = 180
         # New attributes for barrel recoil
-        self.barrel_recoil = 0
+        self.barrel_recoil = [0]  # Initialize as a list with one element
         self.max_barrel_recoil = 10
         self.barrel_recoil_speed = 1
         self.level = 1
         self.score = 0
+        self.tank_type = "basic"
+        self.upgrade_available = False
+
+    def upgrade_to_twin(self):
+        self.tank_type = "twin"
+        self.cannon_separation = self.size * 1.0
+        self.cannon_length = 80
+        self.next_cannon = 1
+        self.barrel_recoil = [0, 0]  # Two barrels for twin
+        self.twin_fire_mode = "alternate"
+        self.upgrade_available = False
+
+    def upgrade_to_machine_gun(self):
+        self.tank_type = "machine_gun"
+        self.cannon_length = 70
+        self.cannon_thickness = 50
+        self.barrel_recoil = [0]  # Single barrel for machine gun
+        self.fire_rate = 5
+        self.upgrade_available = False
+
+    def upgrade_to_flank_guard(self):
+        self.tank_type = "flank"
+        self.front_cannon_length = 75
+        self.back_cannon_length = 60
+        self.barrel_recoil = [0, 0]  # Two barrels for flank guard
+        self.upgrade_available = False
 
     def update_level(self):
+        previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
+        # Remove the upgrade_available flag, as we'll check the level directly
 
     def level_up(self):
         if self.level < 45:
@@ -432,7 +465,7 @@ class Tank:
 
     def draw(self):
         # Calculate recoil-adjusted cannon length
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]  # Use the first element of the list
 
         # Draw cannon with recoil
         cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
@@ -448,6 +481,15 @@ class Tank:
             (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
         ]
         pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+
+        if self.tank_type == "basic":
+            self.draw_basic_cannon()
+        elif self.tank_type == "twin":
+            self.draw_twin_cannons()
+        elif self.tank_type == "flank":
+            self.draw_flank_cannons()
+        elif self.tank_type == "machine_gun":
+            self.draw_machine_gun_cannon()
 
         # Draw tank body
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
@@ -470,6 +512,80 @@ class Tank:
                 health_bar_width,
                 health_bar_height
             ), 1)
+
+    def draw_basic_cannon(self):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(self.x, self.y, cannon_end_x, cannon_end_y)
+
+    def draw_twin_cannons(self):
+        for i in [-1, 1]:
+            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
+            cannon_start_x = self.x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2
+            cannon_start_y = self.y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2
+            cannon_start_x -= math.cos(self.angle) * self.size * 0.1
+            cannon_start_y -= math.sin(self.angle) * self.size * 0.1
+            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+            self.draw_cannon(cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y)
+
+    def draw_flank_cannons(self):
+        # Draw front cannon
+        recoil_adjusted_length = self.front_cannon_length - self.barrel_recoil[0]
+        front_cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
+        front_cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(self.x, self.y, front_cannon_end_x, front_cannon_end_y)
+
+        # Draw back cannon
+        back_angle = self.angle + math.pi
+        recoil_adjusted_length = self.back_cannon_length - self.barrel_recoil[1]
+        back_cannon_end_x = self.x + math.cos(back_angle) * recoil_adjusted_length
+        back_cannon_end_y = self.y + math.sin(back_angle) * recoil_adjusted_length
+        self.draw_cannon(self.x, self.y, back_cannon_end_x, back_cannon_end_y)
+
+    def draw_machine_gun_cannon(self):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
+
+        # Calculate the funnel shape
+        base_width = self.cannon_thickness * 0.75
+        tip_width = self.cannon_thickness * 1.0  # Thicker at the tip
+
+        # Calculate the four corners of the funnel
+        perpendicular_angle = self.angle + math.pi / 2
+        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
+        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
+        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
+        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
+
+        cannon_corners = [
+            (self.x + base_offset_x, self.y + base_offset_y),
+            (self.x - base_offset_x, self.y - base_offset_y),
+            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
+            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        ]
+
+        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+
+    def create_bullet(self, x, y, angle):
+        bullet_speed = 10
+        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 0)
+        self.bullets.append(bullet)
+
+    def draw_cannon(self, start_x, start_y, end_x, end_y):
+        perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
+        half_thickness = self.cannon_thickness / 2
+        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
+        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
+        cannon_corners = [
+            (start_x + corner_offset_x, start_y + corner_offset_y),
+            (start_x - corner_offset_x, start_y - corner_offset_y),
+            (end_x - corner_offset_x, end_y - corner_offset_y),
+            (end_x + corner_offset_x, end_y + corner_offset_y)
+        ]
+        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
 
     def update(self, keys_pressed):
         move_x, move_y = 0, 0
@@ -508,8 +624,9 @@ class Tank:
                 self.health = min(self.max_health, self.health + self.regen_rate)
 
         # Update barrel recoil
-        if self.barrel_recoil > 0:
-            self.barrel_recoil = max(0, self.barrel_recoil - self.barrel_recoil_speed)
+        for i in range(len(self.barrel_recoil)):
+            if self.barrel_recoil[i] > 0:
+                self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
 
     def rotate_to_mouse(self, mouse_pos):
         if self.autospin:
@@ -520,22 +637,78 @@ class Tank:
 
     def shoot(self):
         if self.shoot_cooldown <= 0:
-            bullet_x = self.world_x + math.cos(self.angle) * self.size
-            bullet_y = self.world_y + math.sin(self.angle) * self.size
-            bullet_speed = 10
-            bullet = Bullet(bullet_x, bullet_y, math.cos(self.angle) * bullet_speed,
-                            math.sin(self.angle) * bullet_speed, 0)
-            self.bullets.append(bullet)
+            if self.tank_type == "basic":
+                self.shoot_basic()
+            elif self.tank_type == "twin":
+                self.shoot_twin()
+            elif self.tank_type == "flank":
+                self.shoot_flank()
+            elif self.tank_type == "machine_gun":
+                self.shoot_machine_gun()
 
             # Apply recoil
             recoil_force = 0.2
             self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
             self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
 
-            # Apply barrel recoil
-            self.barrel_recoil = self.max_barrel_recoil
-
             self.shoot_cooldown = 15
+
+    def shoot_basic(self):
+        bullet_x = self.world_x + math.cos(self.angle) * self.size
+        bullet_y = self.world_y + math.sin(self.angle) * self.size
+        self.create_bullet(bullet_x, bullet_y, self.angle)
+        self.barrel_recoil[0] = self.max_barrel_recoil
+
+    def shoot_twin(self):
+        if self.twin_fire_mode == "alternate":
+            self.shoot_twin_alternate()
+        else:
+            self.shoot_twin_simultaneous()
+
+    def shoot_twin_alternate(self):
+        i = 1 if self.next_cannon == 1 else -1
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
+        bullet_x = self.world_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.cos(
+            self.angle) * self.size * 0.9
+        bullet_y = self.world_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.sin(
+            self.angle) * self.size * 0.9
+        self.create_bullet(bullet_x, bullet_y, self.angle)
+        self.barrel_recoil[(i + 1) // 2] = self.max_barrel_recoil
+        self.next_cannon = 3 - self.next_cannon  # Switch between 1 and 2
+
+    def shoot_twin_simultaneous(self):
+        for i in [-1, 1]:
+            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
+            bullet_x = self.world_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.cos(
+                self.angle) * self.size * 0.9
+            bullet_y = self.world_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.sin(
+                self.angle) * self.size * 0.9
+            self.create_bullet(bullet_x, bullet_y, self.angle)
+            self.barrel_recoil[(i + 1) // 2] = self.max_barrel_recoil
+
+    def shoot_flank(self):
+        # Shoot front cannon
+        front_bullet_x = self.world_x + math.cos(self.angle) * self.size
+        front_bullet_y = self.world_y + math.sin(self.angle) * self.size
+        self.create_bullet(front_bullet_x, front_bullet_y, self.angle)
+        self.barrel_recoil[0] = self.max_barrel_recoil
+
+        # Shoot back cannon
+        back_angle = self.angle + math.pi
+        back_bullet_x = self.world_x + math.cos(back_angle) * self.size
+        back_bullet_y = self.world_y + math.sin(back_angle) * self.size
+        self.create_bullet(back_bullet_x, back_bullet_y, back_angle)
+        self.barrel_recoil[1] = self.max_barrel_recoil
+
+    def shoot_machine_gun(self):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        spread = math.pi / 16  # Bullet spread for machine gun
+        for _ in range(self.fire_rate):
+            angle = self.angle + random.uniform(-spread, spread)
+            bullet_x = self.world_x + math.cos(angle) * self.size
+            bullet_y = self.world_y + math.sin(angle) * self.size
+            self.create_bullet(bullet_x, bullet_y, angle)
+        self.barrel_recoil[0] = self.max_barrel_recoil
 
     def handle_autofire(self):
         if self.autofire and self.shoot_cooldown <= 0:
@@ -875,6 +1048,38 @@ class Shape:
                 health_bar_height
             ), 1)
 
+def draw_upgrade_buttons(screen, tank):
+    if tank.level >= 15 and tank.tank_type == "basic":
+        font = pygame.font.SysFont(None, 24)
+        button_y = UPGRADE_BUTTON_MARGIN
+
+        for upgrade_type in ["Twin", "Machine Gun", "Flank Guard"]:
+            button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, button_y, UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+            pygame.draw.rect(screen, WHITE, button_rect)
+            pygame.draw.rect(screen, BLACK, button_rect, 2)
+
+            text = font.render(upgrade_type, True, BLACK)
+            text_rect = text.get_rect(center=button_rect.center)
+            screen.blit(text, text_rect)
+
+            button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
+
+def handle_upgrade_click(tank, mouse_pos):
+    if tank.level >= 15 and tank.tank_type == "basic":
+        button_y = UPGRADE_BUTTON_MARGIN
+        for upgrade_type in ["Twin", "Machine Gun", "Flank Guard"]:
+            button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, button_y, UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+            if button_rect.collidepoint(mouse_pos):
+                if upgrade_type == "Twin":
+                    tank.upgrade_to_twin()
+                elif upgrade_type == "Machine Gun":
+                    tank.upgrade_to_machine_gun()
+                elif upgrade_type == "Flank Guard":
+                    tank.upgrade_to_flank_guard()
+                return True
+            button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
+    return False
+
 def draw_score(screen, score):
     font = pygame.font.SysFont(None, 36)
     score_text = font.render(f"Score: {score}", True, BLACK)
@@ -1114,6 +1319,11 @@ def game_loop():
             elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
                 if tank.shoot_cooldown <= 0:
                     tank.shoot()
+                if event.button == 1:  # Left mouse button
+                    if handle_upgrade_click(tank, event.pos):
+                        continue  # Skip the rest of the loop if an upgrade was selected
+                    if tank.shoot_cooldown <= 0:
+                        tank.shoot()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_e:
                     tank.autofire = not tank.autofire
@@ -1209,7 +1419,6 @@ def game_loop():
         draw_score(screen, tank.score)
         draw_level_info(screen, tank)
 
-
         for shape in shapes:
             shape.draw(tank)
 
@@ -1229,6 +1438,9 @@ def game_loop():
         tank.draw()
         for bullet in tank.bullets:
             bullet.draw(tank)
+
+        # Draw upgrade buttons after drawing the tank
+        draw_upgrade_buttons(screen, tank)
 
         if minimap_mode > 0:
             draw_minimap(tank, shapes, enemies, minimap_mode)
