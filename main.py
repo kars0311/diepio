@@ -2,6 +2,7 @@ import pygame
 import math
 import random
 import time
+import numpy as np
 
 # Initialize pygame
 pygame.init()
@@ -10,6 +11,9 @@ pygame.init()
 SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
 TILE_SIZE = 25
+
+levels = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45])
+scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 787, 938, 1109, 1301, 1516, 1757, 2026, 2325, 2658, 3026, 3433, 3883, 4379, 4925, 5525, 6184, 6907, 7698, 8537, 9426, 10368, 11367, 12426, 13549, 14739, 16000, 17337, 18754, 20256, 21849, 23536])
 
 # Minimap visibility
 minimap_visible = True  # Start with the minimap visible by default
@@ -350,11 +354,12 @@ class Enemy:
         else:
             self.target = None
 
-    def take_damage(self, damage):
+    def take_damage(self, damage, tank):
         self.health -= damage
         if self.health <= 0:
             self.health = 0
-            self.alive = False  # Mark the enemy as dead
+            self.alive = False
+            tank.add_score(500)  # Add score for destroying an enemy
         return self.alive
 
     def check_collision_with_enemies(self, enemies):
@@ -373,7 +378,6 @@ class Tank:
         self.x = SCREEN_WIDTH // 2
         self.y = SCREEN_HEIGHT // 2
         self.size = 40
-        self.score=0
         self.speed = 5
         self.angle = 0
         self.color = AQUA
@@ -398,6 +402,33 @@ class Tank:
         self.barrel_recoil = 0
         self.max_barrel_recoil = 10
         self.barrel_recoil_speed = 1
+        self.level = 1
+        self.score = 0
+
+    def update_level(self):
+        self.level = np.searchsorted(scores, self.score, side='right')
+
+    def level_up(self):
+        if self.level < 45:
+            self.level += 1
+            self.score = scores[self.level - 1]
+            # Here you might want to add any other effects of leveling up
+            # For example, increasing health, damage, etc.
+
+    def get_progress_to_next_level(self):
+        if self.level >= len(levels):
+            return 1.0  # Max level reached
+        if self.level == len(levels) - 1:
+            # For the last level (44 to 45), calculate progress normally
+            current_level_score = scores[self.level - 1]
+            next_level_score = scores[self.level]
+        else:
+            # For all other levels
+            current_level_score = scores[self.level - 1]
+            next_level_score = scores[self.level]
+
+        progress = (self.score - current_level_score) / (next_level_score - current_level_score)
+        return min(max(progress, 0), 1)  # Ensure progress is between 0 and 1
 
     def draw(self):
         # Calculate recoil-adjusted cannon length
@@ -529,7 +560,7 @@ class Tank:
             distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
             if distance < self.size + enemy.size:
                 self.take_damage(5, "Enemy")
-                enemy.take_damage(5)
+                enemy.take_damage(5, self)  # Pass 'self' (the tank) here
                 angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
                 push_distance = (self.size + enemy.size) - distance
                 self.world_x += math.cos(angle) * push_distance / 2
@@ -571,6 +602,10 @@ class Tank:
                         self.world_y += math.sin(angle) * push_distance / 2
                         shape.world_x -= math.cos(angle) * push_distance / 2
                         shape.world_y -= math.sin(angle) * push_distance / 2
+
+    def add_score(self, points):
+        self.score += points
+        self.update_level()
 
 class Bullet:
     def __init__(self, x, y, vel_x, vel_y, tankNum):
@@ -625,11 +660,11 @@ class Bullet:
                         return True
         return False
 
-    def check_collision_with_enemies(self, enemies):
+    def check_collision_with_enemies(self, enemies, tank):
         for enemy in enemies:
             distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
             if distance < self.radius + enemy.size:
-                enemy.take_damage(self.damage)
+                enemy.take_damage(self.damage, tank)
                 return True
         return False
 
@@ -776,11 +811,11 @@ class Shape:
         if self.health <= 0:
             if tank:
                 if self.shape_type == "square":
-                    tank.score += 10
+                    tank.add_score(10)
                 elif self.shape_type == "triangle":
-                    tank.score += 25
+                    tank.add_score(25)
                 elif self.shape_type == "pentagon":
-                    tank.score += 130
+                    tank.add_score(130)
             self.regenerate()
 
     def regenerate(self):
@@ -1019,6 +1054,35 @@ def initialize_shapes():
         shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "pentagon"))
     return shapes
 
+
+def draw_level_info(screen, tank):
+    font = pygame.font.SysFont(None, 36)
+    level_text = font.render(f"Level: {tank.level}", True, BLACK)
+    level_rect = level_text.get_rect()
+    level_rect.bottomleft = (10, SCREEN_HEIGHT - 10)
+    screen.blit(level_text, level_rect)
+
+    # Draw progress bar
+    progress = tank.get_progress_to_next_level()
+    bar_width = 200
+    bar_height = 20
+    bar_x = level_rect.right + 20
+    bar_y = SCREEN_HEIGHT - bar_height - 10
+
+    # Background bar
+    pygame.draw.rect(screen, GRAY, (bar_x, bar_y, bar_width, bar_height))
+    # Progress bar
+    pygame.draw.rect(screen, GREEN, (bar_x, bar_y, int(bar_width * progress), bar_height))
+    # Border
+    pygame.draw.rect(screen, BLACK, (bar_x, bar_y, bar_width, bar_height), 2)
+
+    # Progress percentage
+    progress_text = font.render(f"{progress:.0%}", True, BLACK)
+    progress_rect = progress_text.get_rect()
+    progress_rect.midleft = (bar_x + bar_width + 10, bar_y + bar_height // 2)
+    screen.blit(progress_text, progress_rect)
+
+
 def game_loop():
     global game_over, killer_object
 
@@ -1036,6 +1100,10 @@ def game_loop():
     start_time = time.time()
     killer_object = ""
     collision_effects = []
+    level_up_cooldown = 0
+    level_up_cooldown_max = 15  # Initial cooldown
+    level_up_cooldown_min = 3  # Minimum cooldown when holding the key
+    level_up_hold_time = 0  # Track how long the key has been held
 
     while running:
         screen.fill(GRAY)
@@ -1055,6 +1123,20 @@ def game_loop():
                     tank.take_damage(tank.health, "Self-Destruct")
                 if event.key == pygame.K_TAB:
                     minimap_mode = (minimap_mode + 1) % 5
+        # Add the new key handling logic here
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_k]:
+            if level_up_cooldown == 0:
+                tank.level_up()
+                level_up_cooldown = max(level_up_cooldown_min,
+                                        level_up_cooldown_max - level_up_hold_time // 2)
+                level_up_hold_time += 1
+            level_up_hold_time = min(level_up_hold_time + 1, 30)  # Cap the hold time
+        else:
+            level_up_hold_time = 0  # Reset hold time when key is released
+
+        if level_up_cooldown > 0:
+            level_up_cooldown -= 1
 
         if not game_over:
             keys_pressed = pygame.key.get_pressed()
@@ -1075,14 +1157,14 @@ def game_loop():
                 tank.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
 
             tank.check_collision_with_shapes(shapes)
-
+            tank.update_level()
             # Handle player bullets
             for bullet in tank.bullets[:]:
                 bullet.update()
                 if bullet.off_screen():
                     collision_effects.append(bullet.create_collision_effect())
                     tank.bullets.remove(bullet)
-                elif bullet.check_collision(shapes, tank):  # Pass tank here
+                elif bullet.check_collision(shapes, tank):
                     collision_effects.append(bullet.create_collision_effect())
                     tank.bullets.remove(bullet)
                 elif include_enemies:
@@ -1095,7 +1177,8 @@ def game_loop():
                             if enemy_bullet in enemy.bullets:
                                 enemy.bullets.remove(enemy_bullet)
                                 break
-                    elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive]):
+                    elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive],
+                                                             tank):  # Pass tank here
                         collision_effects.append(bullet.create_collision_effect())
                         tank.bullets.remove(bullet)
 
@@ -1124,6 +1207,7 @@ def game_loop():
         draw_grid(tank)
         draw_world_border(tank)
         draw_score(screen, tank.score)
+        draw_level_info(screen, tank)
 
 
         for shape in shapes:
