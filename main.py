@@ -464,25 +464,9 @@ class Tank:
         return min(max(progress, 0), 1)  # Ensure progress is between 0 and 1
 
     def draw(self):
-        # Calculate recoil-adjusted cannon length
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]  # Use the first element of the list
-
-        # Draw cannon with recoil
-        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
-        perpendicular_angle = self.angle + math.pi / 2
-        half_thickness = self.cannon_thickness / 2
-        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
-        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
-        cannon_corners = [
-            (self.x + corner_offset_x, self.y + corner_offset_y),
-            (self.x - corner_offset_x, self.y - corner_offset_y),
-            (cannon_end_x - corner_offset_x, cannon_end_y - corner_offset_y),
-            (cannon_end_x + corner_offset_x, cannon_end_y + corner_offset_y)
-        ]
-        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
 
         if self.tank_type == "basic":
+            self.cannon_thickness = 35
             self.draw_basic_cannon()
         elif self.tank_type == "twin":
             self.draw_twin_cannons()
@@ -639,19 +623,21 @@ class Tank:
         if self.shoot_cooldown <= 0:
             if self.tank_type == "basic":
                 self.shoot_basic()
+                self.shoot_cooldown = 15
             elif self.tank_type == "twin":
                 self.shoot_twin()
+                self.shoot_cooldown = 7.5
             elif self.tank_type == "flank":
                 self.shoot_flank()
+                self.shoot_cooldown = 15
             elif self.tank_type == "machine_gun":
                 self.shoot_machine_gun()
+                self.shoot_cooldown = 7.5
 
             # Apply recoil
             recoil_force = 0.2
             self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
             self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
-
-            self.shoot_cooldown = 15
 
     def shoot_basic(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
@@ -707,7 +693,7 @@ class Tank:
             angle = self.angle + random.uniform(-spread, spread)
             bullet_x = self.world_x + math.cos(angle) * self.size
             bullet_y = self.world_y + math.sin(angle) * self.size
-            self.create_bullet(bullet_x, bullet_y, angle)
+        self.create_bullet(bullet_x, bullet_y, angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
     def handle_autofire(self):
@@ -720,6 +706,7 @@ class Tank:
         self.health -= damage
         if self.health <= 0:
             self.health = 0
+            self.tank_type = "basic"
             global game_over, killer_object
             game_over = True
             if isinstance(attacker, Shape):
