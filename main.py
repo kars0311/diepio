@@ -93,7 +93,7 @@ class Enemy:
         self.target = None
         self.max_barrel_recoil = 10
         self.barrel_recoil_speed = 1
-        self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun"])
+        self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
         if self.tank_type == "twin":
             self.cannon_separation = self.size * 1.0
             self.cannon_length = 80
@@ -109,6 +109,11 @@ class Enemy:
             self.cannon_thickness = 50  # Wider at the base
             self.barrel_recoil = [0]
             self.fire_rate = 5  # Higher fire rate for machine gun
+        elif self.tank_type == "sniper":
+            self.cannon_length = 90
+            self.cannon_thickness = 35  # Wider at the base
+            self.barrel_recoil = [0]
+            self.fire_rate = 2  # Lower fire rate for sniper
         else:
             self.barrel_recoil = [0]  # Single recoil for basic tank
 
@@ -127,6 +132,8 @@ class Enemy:
             self.draw_flank_cannons(screen_x, screen_y)
         elif self.tank_type == "machine_gun":
             self.draw_machine_gun_cannon(screen_x, screen_y)
+        elif self.tank_type == "sniper":
+            self.draw_sniper_cannon(screen_x, screen_y)
 
         # Draw enemy body
         pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
@@ -190,6 +197,12 @@ class Enemy:
 
         pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
 
+    def draw_sniper_cannon(self, screen_x, screen_y):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen_x, screen_y, cannon_end_x, cannon_end_y)
+
     def draw_cannon(self, start_x, start_y, end_x, end_y):
         perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
         half_thickness = self.cannon_thickness / 2
@@ -231,6 +244,8 @@ class Enemy:
             self.shoot_flank()
         elif self.tank_type == "machine_gun":
             self.shoot_machine_gun()
+        elif self.tank_type == "sniper":
+            self.shoot_sniper()
 
     def shoot_basic(self):
         recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
@@ -286,8 +301,17 @@ class Enemy:
         self.create_bullet(bullet_x, bullet_y, angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
+    def shoot_sniper(self):
+        # Shoot front cannon
+        front_bullet_x = self.world_x + math.cos(self.angle) * self.size
+        front_bullet_y = self.world_y + math.sin(self.angle) * self.size
+        self.create_bullet(front_bullet_x, front_bullet_y, self.angle)
+        self.barrel_recoil[0] = self.max_barrel_recoil
+
     def create_bullet(self, x, y, angle):
         bullet_speed = 8
+        if self.tank_type == "sniper":
+            bullet_speed = 12
         bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1)
         self.bullets.append(bullet)
 
@@ -317,7 +341,7 @@ class Enemy:
         if self.shoot_cooldown <= 0 and self.target:
             self.shoot()
             if self.tank_type == "basic":
-                self.shoot_cooldown = 30
+                self.shoot_cooldown = 25
             elif self.tank_type == "twin":
                 if self.twin_fire_mode == "simultaneous":
                     self.shoot_cooldown = 20
@@ -327,6 +351,8 @@ class Enemy:
                 self.shoot_cooldown = 25
             elif self.tank_type == "machine_gun":
                 self.shoot_cooldown = 10  # Faster shooting for machine gun
+            elif self.tank_type == "sniper":
+                self.shoot_cooldown = 30
 
         if self.shoot_cooldown > 0:
             self.shoot_cooldown -= 1
