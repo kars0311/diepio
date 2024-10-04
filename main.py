@@ -8,7 +8,7 @@ import numpy as np
 pygame.init()
 
 # Screen and world dimensions
-SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900
+SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900 #1440/780
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
 TILE_SIZE = 20
 
