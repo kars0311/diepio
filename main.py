@@ -10,7 +10,7 @@ pygame.init()
 # Screen and world dimensions
 SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900 #1440/780
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
-TILE_SIZE = 20
+TILE_SIZE = 25
 
 # Add these constants at the top of your file
 UPGRADE_BUTTON_WIDTH = 150
