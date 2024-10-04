@@ -18,7 +18,7 @@ UPGRADE_BUTTON_HEIGHT = 40
 UPGRADE_BUTTON_MARGIN = 10
 
 levels = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45])
-scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 7870, 9380, 11090, 13010, 15160, 17570, 20260, 23250, 26580, 30260, 34330, 38830, 43790, 49250, 55250, 61840, 69070, 76980, 85370, 94260, 103680, 113670, 124260, 135490, 147390, 160000, 173370, 187540, 202560, 218490, 235360])
+scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 787, 938, 1109, 1301, 1516, 1757, 2026, 2325, 2658, 3026, 3433, 3883, 4379, 4925, 5525, 6184, 6907, 7698, 8537, 9426, 10368, 11367, 12426, 13549, 14739, 16000, 17337, 18754, 20256, 21849, 23536])
 
 # Minimap visibility
 minimap_visible = True  # Start with the minimap visible by default
@@ -29,16 +29,36 @@ MINIMAP_HEIGHT = 200
 MINIMAP_SCALE = MINIMAP_WIDTH / WORLD_WIDTH
 
 # Colors
-AQUA = (63,180,223)
+
 DARK_GRAY = (170,170,170)
 WHITE = (255, 255, 255)
-BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
-RED = (255, 0, 0)
+RED = (241, 78, 85)
 PINK = (255,150,150)
 GREEN = (0, 255, 0)
-YELLOW = (255, 255, 0)
+AQUA = (0, 178, 225)
+PENTAGONBLUE = (117, 141, 253)
+SQUAREYELLOW = (255, 232, 105)
+TRIANGLERED = (252,118,119)
+CANNONGREY = (153, 153, 153)
+HEALTHBARGREEN = (132, 227, 125)
+SCREENGREY = (204, 204, 204)
+GRIDLINEGREY = (193, 193, 193)
+SCOREPROGRESSBARGREEN = (108, 240, 162)
+CANNONOUTLINEGREY = (114, 114, 114)
+HEALTHBAROUTLINE = (85, 85, 85)
+SCOREBAROUTLINE = (61, 61, 61)
+
+SQUAREOUTLINE = (191, 174, 78)
+TRIANGLEOUTLINE = (189, 88, 89)
+PENTAGONOUTLINE = (87, 106, 189)
+
+ENEMYOUTLINE = (180, 58, 63)
+TANKOUTLINE = (3, 133, 168)
+
+OUTOFBOUNDSCREENGREY = (183, 183, 183)
+OUTOFBOUNDSGRIDLINEGREY = (172, 172, 172)
 
 # Create the screen object
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
@@ -135,6 +155,9 @@ class Enemy:
         elif self.tank_type == "sniper":
             self.draw_sniper_cannon(screen_x, screen_y)
 
+        # Draw enemy outline
+        pygame.draw.circle(screen, ENEMYOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
+
         # Draw enemy body
         pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
 
@@ -206,6 +229,21 @@ class Enemy:
     def draw_cannon(self, start_x, start_y, end_x, end_y):
         perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
         half_thickness = self.cannon_thickness / 2
+        outline_thickness = 3  # Adjust this value to change the outline thickness
+
+        # Calculate corners for the outline
+        outline_offset_x = math.cos(perpendicular_angle) * (half_thickness + outline_thickness)
+        outline_offset_y = math.sin(perpendicular_angle) * (half_thickness + outline_thickness)
+        outline_corners = [
+            (start_x + outline_offset_x, start_y + outline_offset_y),
+            (start_x - outline_offset_x, start_y - outline_offset_y),
+            (end_x - outline_offset_x, end_y - outline_offset_y),
+            (end_x + outline_offset_x, end_y + outline_offset_y)
+        ]
+
+        # Draw the outline
+        pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_corners)
+
         corner_offset_x = math.cos(perpendicular_angle) * half_thickness
         corner_offset_y = math.sin(perpendicular_angle) * half_thickness
         cannon_corners = [
@@ -214,21 +252,21 @@ class Enemy:
             (end_x - corner_offset_x, end_y - corner_offset_y),
             (end_x + corner_offset_x, end_y + corner_offset_y)
         ]
-        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
 
     def draw_health_bar(self, screen_x, screen_y):
         if self.health < self.max_health:
             health_bar_width = self.size * 2
             health_bar_height = 5
             health_percentage = self.health / self.max_health
-            health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+            health_bar_color = HEALTHBARGREEN
             pygame.draw.rect(screen, health_bar_color, (
                 int(screen_x - health_bar_width // 2),
                 int(screen_y + self.size + 5),
                 int(health_bar_width * health_percentage),
                 health_bar_height
             ))
-            pygame.draw.rect(screen, BLACK, (
+            pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(screen_x - health_bar_width // 2),
                 int(screen_y + self.size + 5),
                 health_bar_width,
@@ -416,6 +454,7 @@ class Tank:
         self.world_y = WORLD_HEIGHT // 2
         self.bullets = []
         self.autofire = False
+        self.autofire = False
         self.autospin = False
         self.shoot_cooldown = 0
         self.cannon_length = 75
@@ -501,6 +540,9 @@ class Tank:
         elif self.tank_type == "machine_gun":
             self.draw_machine_gun_cannon()
 
+        # Draw tank outline
+        pygame.draw.circle(screen, TANKOUTLINE, (int(self.x), int(self.y)), self.size + 4)
+
         # Draw tank body
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
 
@@ -509,14 +551,14 @@ class Tank:
             health_bar_width = self.size * 2
             health_bar_height = 5
             health_percentage = self.health / self.max_health
-            health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+            health_bar_color = HEALTHBARGREEN
             pygame.draw.rect(screen, health_bar_color, (
                 int(self.x - health_bar_width // 2),
                 int(self.y + self.size + 5),  # Move below the tank
                 int(health_bar_width * health_percentage),
                 health_bar_height
             ))
-            pygame.draw.rect(screen, BLACK, (
+            pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(self.x - health_bar_width // 2),
                 int(self.y + self.size + 5),  # Move below the tank
                 health_bar_width,
@@ -577,7 +619,7 @@ class Tank:
             (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
         ]
 
-        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
 
     def create_bullet(self, x, y, angle):
         bullet_speed = 10
@@ -587,6 +629,22 @@ class Tank:
     def draw_cannon(self, start_x, start_y, end_x, end_y):
         perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
         half_thickness = self.cannon_thickness / 2
+        outline_thickness = 3  # Adjust this value to change the outline thickness
+
+        # Calculate corners for the outline
+        outline_offset_x = math.cos(perpendicular_angle) * (half_thickness + outline_thickness)
+        outline_offset_y = math.sin(perpendicular_angle) * (half_thickness + outline_thickness)
+        outline_corners = [
+            (start_x + outline_offset_x, start_y + outline_offset_y),
+            (start_x - outline_offset_x, start_y - outline_offset_y),
+            (end_x - outline_offset_x, end_y - outline_offset_y),
+            (end_x + outline_offset_x, end_y + outline_offset_y)
+        ]
+
+        # Draw the outline
+        pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_corners)
+
+        # Draw the main cannon body
         corner_offset_x = math.cos(perpendicular_angle) * half_thickness
         corner_offset_y = math.sin(perpendicular_angle) * half_thickness
         cannon_corners = [
@@ -595,7 +653,7 @@ class Tank:
             (end_x - corner_offset_x, end_y - corner_offset_y),
             (end_x + corner_offset_x, end_y + corner_offset_y)
         ]
-        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
+        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
 
     def update(self, keys_pressed):
         move_x, move_y = 0, 0
@@ -908,7 +966,7 @@ def initialize_enemies():
     return enemies
 
 class Shape:
-    def __init__(self, x, y, shape_type):
+    def __init__(self, x, y, shape_type, outline_thickness=4):
         self.world_x = x
         self.world_y = y
         self.shape_type = shape_type
@@ -916,13 +974,14 @@ class Shape:
         self.rotation_speed = random.uniform(0.01, 0.03)
         self.rotation_direction = random.choice([-1, 1])
         self.points = []
+        self.outline_thickness = outline_thickness  # New attribute for outline thickness
 
         if shape_type == "square":
-            self.size, self.health, self.max_health, self.color = 40, 100, 100, YELLOW
+            self.size, self.health, self.max_health, self.color, self.outline_color = 40, 100, 100, SQUAREYELLOW, SQUAREOUTLINE
         elif shape_type == "triangle":
-            self.size, self.health, self.max_health, self.color = 60, 200, 200, RED
+            self.size, self.health, self.max_health, self.color, self.outline_color = 60, 200, 200, TRIANGLERED, TRIANGLEOUTLINE
         elif shape_type == "pentagon":
-            self.size, self.health, self.max_health, self.color = 80, 300, 300, BLUE
+            self.size, self.health, self.max_health, self.color, self.outline_color = 80, 300, 300, PENTAGONBLUE, PENTAGONOUTLINE
 
         self.alive = True
         self.update_points()
@@ -1040,21 +1099,26 @@ class Shape:
         screen_y = self.world_y - tank.world_y + tank.y
 
         screen_points = [(x - tank.world_x + tank.x, y - tank.world_y + tank.y) for x, y in self.points]
+
+        # Draw the filled shape
         pygame.draw.polygon(screen, self.color, screen_points)
+
+        # Draw the outline with adjustable thickness
+        pygame.draw.polygon(screen, self.outline_color, screen_points, self.outline_thickness)
 
         # Draw health bar only if health is below max
         if self.health < self.max_health:
             health_bar_width = self.size
             health_bar_height = 5
             health_percentage = self.health / self.max_health
-            health_bar_color = RED if self.health < self.max_health / 2 else GREEN
+            health_bar_color = HEALTHBARGREEN
             pygame.draw.rect(screen, health_bar_color, (
                 int(screen_x - health_bar_width // 2),
                 int(screen_y + self.size // 2 + 5),
                 int(health_bar_width * health_percentage),
                 health_bar_height
             ))
-            pygame.draw.rect(screen, BLACK, (
+            pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(screen_x - health_bar_width // 2),
                 int(screen_y + self.size // 2 + 5),
                 health_bar_width,
@@ -1103,14 +1167,14 @@ def draw_score(screen, score):
 def draw_autofire_indicator(tank):
     font = pygame.font.SysFont(None, 24)
     autofire_text = "Autofire: ON" if tank.autofire else "Autofire: OFF"
-    autofire_color = GREEN if tank.autofire else RED
+    autofire_color = HEALTHBARGREEN if tank.autofire else RED
     text_surface = font.render(autofire_text, True, autofire_color)
     screen.blit(text_surface, (10, 10))
 
 def draw_autospin_indicator(tank):
     font = pygame.font.SysFont(None, 24)
     autospin_text = "Autospin: ON" if tank.autospin else "Autospin: OFF"
-    autospin_color = GREEN if tank.autospin else RED
+    autospin_color = HEALTHBARGREEN if tank.autospin else RED
     text_surface = font.render(autospin_text, True, autospin_color)
     screen.blit(text_surface, (10, 40))
 # Draw the grid-based terrain
@@ -1127,7 +1191,7 @@ def draw_grid(tank):
             tile_x = col * TILE_SIZE - offset_x
             tile_y = row * TILE_SIZE - offset_y
             # Draw the grid tile
-            pygame.draw.rect(screen, DARK_GRAY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+            pygame.draw.rect(screen, GRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
 
 def format_time(seconds):
     minutes, seconds = divmod(int(seconds), 60)
@@ -1288,9 +1352,9 @@ def draw_level_info(screen, tank):
     bar_y = SCREEN_HEIGHT - bar_height - 10
 
     # Background bar
-    pygame.draw.rect(screen, GRAY, (bar_x, bar_y, bar_width, bar_height))
+    pygame.draw.rect(screen, SCOREBAROUTLINE, (bar_x, bar_y, bar_width, bar_height))
     # Progress bar
-    pygame.draw.rect(screen, GREEN, (bar_x, bar_y, int(bar_width * progress), bar_height))
+    pygame.draw.rect(screen, SCOREPROGRESSBARGREEN, (bar_x, bar_y, int(bar_width * progress), bar_height))
     # Border
     pygame.draw.rect(screen, BLACK, (bar_x, bar_y, bar_width, bar_height), 2)
 
@@ -1324,7 +1388,7 @@ def game_loop():
     level_up_hold_time = 0  # Track how long the key has been held
 
     while running:
-        screen.fill(GRAY)
+        screen.fill(SCREENGREY)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
