@@ -106,7 +106,7 @@ class Enemy:
         self.bullets = []
         self.shoot_cooldown = 0
         self.cannon_length = 75
-        self.cannon_thickness = 35
+        self.cannon_thickness = 30
         self.health = 500
         self.max_health = 500
         self.alive = True
@@ -131,7 +131,7 @@ class Enemy:
             self.fire_rate = 5  # Higher fire rate for machine gun
         elif self.tank_type == "sniper":
             self.cannon_length = 90
-            self.cannon_thickness = 35  # Wider at the base
+            self.cannon_thickness = 30
             self.barrel_recoil = [0]
             self.fire_rate = 2  # Lower fire rate for sniper
         else:
@@ -466,7 +466,7 @@ class Tank:
         self.autospin = False
         self.shoot_cooldown = 0
         self.cannon_length = 75
-        self.cannon_thickness = 35
+        self.cannon_thickness = 30
         self.recoil_velocity_x = 0
         self.recoil_velocity_y = 0
         self.recoil_dampening = 0.45
@@ -509,6 +509,13 @@ class Tank:
         self.barrel_recoil = [0, 0]  # Two barrels for flank guard
         self.upgrade_available = False
 
+    def upgrade_to_sniper(self):
+        self.tank_type = "sniper"
+        self.cannon_length = 90
+        self.barrel_recoil = [0]  # Single barrel for sniper
+        self.fire_rate = 1  # Slower fire rate
+        self.upgrade_available = False
+
     def update_level(self):
         previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
@@ -547,6 +554,8 @@ class Tank:
             self.draw_flank_cannons()
         elif self.tank_type == "machine_gun":
             self.draw_machine_gun_cannon()
+        elif self.tank_type == "sniper":
+            self.draw_sniper_cannon()
 
         # Draw tank outline
         pygame.draw.circle(screen, TANKOUTLINE, (int(self.x), int(self.y)), self.size + 4)
@@ -639,6 +648,12 @@ class Tank:
         end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
         pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
 
+    def draw_sniper_cannon(self):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(self.x, self.y, cannon_end_x, cannon_end_y)
+
     def draw_cannon(self, start_x, start_y, end_x, end_y):
         perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
         half_thickness = self.cannon_thickness / 2
@@ -677,6 +692,8 @@ class Tank:
 
     def create_bullet(self, x, y, angle):
         bullet_speed = 10
+        if self.tank_type == "sniper":
+            bullet_speed = 15
         bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 0)
         self.bullets.append(bullet)
 
@@ -742,6 +759,9 @@ class Tank:
             elif self.tank_type == "machine_gun":
                 self.shoot_machine_gun()
                 self.shoot_cooldown = 7.5
+            elif self.tank_type == "sniper":
+                self.shoot_sniper()
+                self.shoot_cooldown = 30  # Longer cooldown for sniper
 
             # Apply recoil
             recoil_force = 0.2
@@ -803,6 +823,12 @@ class Tank:
             bullet_x = self.world_x + math.cos(angle) * self.size
             bullet_y = self.world_y + math.sin(angle) * self.size
         self.create_bullet(bullet_x, bullet_y, angle)
+        self.barrel_recoil[0] = self.max_barrel_recoil
+
+    def shoot_sniper(self):
+        bullet_x = self.world_x + math.cos(self.angle) * self.size
+        bullet_y = self.world_y + math.sin(self.angle) * self.size
+        bullet = self.create_bullet(bullet_x, bullet_y, self.angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
     def handle_autofire(self):
@@ -1155,7 +1181,7 @@ def draw_upgrade_buttons(screen, tank):
         font = pygame.font.SysFont(None, 24)
         button_y = UPGRADE_BUTTON_MARGIN
 
-        for upgrade_type in ["Twin", "Machine Gun", "Flank Guard"]:
+        for upgrade_type in ["Twin", "Machine Gun", "Flank Guard", "Sniper"]:
             button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, button_y, UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
             pygame.draw.rect(screen, WHITE, button_rect)
             pygame.draw.rect(screen, BLACK, button_rect, 2)
@@ -1169,7 +1195,7 @@ def draw_upgrade_buttons(screen, tank):
 def handle_upgrade_click(tank, mouse_pos):
     if tank.level >= 15 and tank.tank_type == "basic":
         button_y = UPGRADE_BUTTON_MARGIN
-        for upgrade_type in ["Twin", "Machine Gun", "Flank Guard"]:
+        for upgrade_type in ["Twin", "Machine Gun", "Flank Guard", "Sniper"]:
             button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, button_y, UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
             if button_rect.collidepoint(mouse_pos):
                 if upgrade_type == "Twin":
@@ -1178,6 +1204,8 @@ def handle_upgrade_click(tank, mouse_pos):
                     tank.upgrade_to_machine_gun()
                 elif upgrade_type == "Flank Guard":
                     tank.upgrade_to_flank_guard()
+                elif upgrade_type == "Sniper":
+                    tank.upgrade_to_sniper()
                 return True
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
     return False
@@ -1361,7 +1389,6 @@ def initialize_shapes():
         shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "pentagon"))
     return shapes
 
-
 def draw_level_info(screen, tank):
     font = pygame.font.SysFont(None, 36)
     level_text = font.render(f"Level: {tank.level}", True, BLACK)
@@ -1388,7 +1415,6 @@ def draw_level_info(screen, tank):
     progress_rect = progress_text.get_rect()
     progress_rect.midleft = (bar_x + bar_width + 10, bar_y + bar_height // 2)
     screen.blit(progress_text, progress_rect)
-
 
 def game_loop():
     global game_over, killer_object
