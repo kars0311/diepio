@@ -244,6 +244,7 @@ class Enemy:
         # Draw the outline
         pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_corners)
 
+        # Calculate corners for the main cannon body
         corner_offset_x = math.cos(perpendicular_angle) * half_thickness
         corner_offset_y = math.sin(perpendicular_angle) * half_thickness
         cannon_corners = [
@@ -252,7 +253,14 @@ class Enemy:
             (end_x - corner_offset_x, end_y - corner_offset_y),
             (end_x + corner_offset_x, end_y + corner_offset_y)
         ]
+
+        # Draw the main cannon body
         pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
+
+        # Draw the flat end of the barrel
+        end_line_start = (end_x - outline_offset_x, end_y - outline_offset_y)
+        end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
 
     def draw_health_bar(self, screen_x, screen_y):
         if self.health < self.max_health:
@@ -603,7 +611,7 @@ class Tank:
 
         # Calculate the funnel shape
         base_width = self.cannon_thickness * 0.75
-        tip_width = self.cannon_thickness * 1.0  # Thicker at the tip
+        tip_width = self.cannon_thickness * 1  # Increased tip width for more pronounced funnel shape
 
         # Calculate the four corners of the funnel
         perpendicular_angle = self.angle + math.pi / 2
@@ -619,12 +627,17 @@ class Tank:
             (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
         ]
 
+        # Draw the main cannon body
         pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
 
-    def create_bullet(self, x, y, angle):
-        bullet_speed = 10
-        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 0)
-        self.bullets.append(bullet)
+        # Draw outline
+        outline_thickness = 3
+        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
+
+        # Draw the flat end of the barrel
+        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
+        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
 
     def draw_cannon(self, start_x, start_y, end_x, end_y):
         perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
@@ -644,7 +657,7 @@ class Tank:
         # Draw the outline
         pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_corners)
 
-        # Draw the main cannon body
+        # Calculate corners for the main cannon body
         corner_offset_x = math.cos(perpendicular_angle) * half_thickness
         corner_offset_y = math.sin(perpendicular_angle) * half_thickness
         cannon_corners = [
@@ -653,7 +666,19 @@ class Tank:
             (end_x - corner_offset_x, end_y - corner_offset_y),
             (end_x + corner_offset_x, end_y + corner_offset_y)
         ]
+
+        # Draw the main cannon body
         pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
+
+        # Draw the flat end of the barrel
+        end_line_start = (end_x - outline_offset_x, end_y - outline_offset_y)
+        end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
+
+    def create_bullet(self, x, y, angle):
+        bullet_speed = 10
+        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 0)
+        self.bullets.append(bullet)
 
     def update(self, keys_pressed):
         move_x, move_y = 0, 0
