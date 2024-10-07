@@ -8,7 +8,7 @@ import numpy as np
 pygame.init()
 
 # Screen and world dimensions
-SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900 #1440/780
+SCREEN_WIDTH, SCREEN_HEIGHT = 1425, 900 #1440/780
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
 TILE_SIZE = 25
 
@@ -450,6 +450,7 @@ class Enemy:
                 enemy.world_x -= math.cos(angle) * push_distance / 2
                 enemy.world_y -= math.sin(angle) * push_distance / 2
 
+
 class Tank:
     def __init__(self):
         self.x = SCREEN_WIDTH // 2
@@ -726,17 +727,20 @@ class Tank:
             self.recoil_velocity_x *= factor
             self.recoil_velocity_y *= factor
 
-        # Handle health regeneration
+            # Handle health regeneration
         if self.health < self.max_health:
             if self.regen_cooldown > 0:
                 self.regen_cooldown -= 1
             else:
                 self.health = min(self.max_health, self.health + self.regen_rate)
 
-        # Update barrel recoil
+                # Update barrel recoil
         for i in range(len(self.barrel_recoil)):
             if self.barrel_recoil[i] > 0:
                 self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
+
+                # Update player size based on level
+#        self.size = int(50 * (1.01 ** (self.level - 1)))
 
     def rotate_to_mouse(self, mouse_pos):
         if self.autospin:
@@ -937,7 +941,7 @@ class Bullet:
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
             # Draw bullet outline
             pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y), self.radius + 4)
-            
+
             pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.radius)
 
     def off_screen(self):
@@ -1234,14 +1238,15 @@ def draw_autospin_indicator(tank):
     autospin_color = HEALTHBARGREEN if tank.autospin else RED
     text_surface = font.render(autospin_text, True, autospin_color)
     screen.blit(text_surface, (10, 40))
+
 # Draw the grid-based terrain
 def draw_grid(tank):
     cols = SCREEN_WIDTH // TILE_SIZE + 2  # Number of tiles needed to fill the width
     rows = SCREEN_HEIGHT // TILE_SIZE + 2  # Number of tiles needed to fill the height
 
-    # Calculate the offset based on the player's world position
-    offset_x = tank.world_x % TILE_SIZE
-    offset_y = tank.world_y % TILE_SIZE
+    # Calculate the offset based on the player's world position and movement
+    offset_x = (tank.world_x - tank.x) % TILE_SIZE
+    offset_y = (tank.world_y - tank.y) % TILE_SIZE
 
     # Calculate the starting world coordinates of the visible area
     start_world_x = tank.world_x - tank.x
