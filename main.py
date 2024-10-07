@@ -10,7 +10,7 @@ pygame.init()
 # Screen and world dimensions
 SCREEN_WIDTH, SCREEN_HEIGHT = 1420, 900 #1440/780
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
-TILE_SIZE = 205
+TILE_SIZE = 25
 
 # Add these constants at the top of your file
 UPGRADE_BUTTON_WIDTH = 150
@@ -909,14 +909,15 @@ class Bullet:
         self.vel_x = vel_x
         self.vel_y = vel_y
         self.radius = 15
-        self.color = AQUA
         self.lifespan = 200
         self.damage = 25 - (tankNum * 15)
         self.tankNum = tankNum  # 0 for player, 1 for enemy
         if tankNum == 0:
             self.color = AQUA
+            self.bulletOutline = TANKOUTLINE
         if tankNum == 1:
             self.color = RED
+            self.bulletOutline = ENEMYOUTLINE
 
     def update(self):
         self.world_x += self.vel_x
@@ -934,6 +935,9 @@ class Bullet:
 
         # Only draw the bullet if it's within the screen bounds
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
+            # Draw bullet outline
+            pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y), self.radius + 4)
+            
             pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.radius)
 
     def off_screen(self):
