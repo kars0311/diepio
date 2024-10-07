@@ -414,6 +414,8 @@ class Enemy:
             if self.barrel_recoil[i] > 0:
                 self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
 
+        self.check_collision_with_shapes(shapes)
+
     def target_player(self, tank):
         self.target = (tank.world_x, tank.world_y)
 
@@ -449,6 +451,32 @@ class Enemy:
                 self.world_y += math.sin(angle) * push_distance / 2
                 enemy.world_x -= math.cos(angle) * push_distance / 2
                 enemy.world_y -= math.sin(angle) * push_distance / 2
+
+    def check_collision_with_shapes(self, shapes):
+        for shape in shapes:
+            if shape.alive:
+                if shape.shape_type == "pentagon":
+                    for angle in range(0, 360, 30):
+                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
+                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
+                        if shape.point_inside_polygon(point_x, point_y):
+                            self.take_damage(5, shape)
+                            shape.take_damage(5, self)
+                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                            self.world_x += math.cos(angle) * 5
+                            self.world_y += math.sin(angle) * 5
+                            break
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.size + shape.size // 2:
+                        self.take_damage(5, shape)
+                        shape.take_damage(5, self)
+                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                        push_distance = (self.size + shape.size // 2) - distance
+                        self.world_x += math.cos(angle) * push_distance / 2
+                        self.world_y += math.sin(angle) * push_distance / 2
+                        shape.world_x -= math.cos(angle) * push_distance / 2
+                        shape.world_y -= math.sin(angle) * push_distance / 2
 
 
 class Tank:
@@ -1113,7 +1141,7 @@ class Shape:
     def take_damage(self, damage, tank=None):
         self.health -= damage
         if self.health <= 0:
-            if tank:
+            if tank and isinstance(tank, Tank):  # Check if tank is an instance of Tank
                 if self.shape_type == "square":
                     tank.add_score(10)
                 elif self.shape_type == "triangle":
@@ -1564,6 +1592,9 @@ def game_loop():
                                     collision_effects.append(player_bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
                                     tank.bullets.remove(player_bullet)
+                                elif bullet.check_collision(shapes, tank):
+                                    collision_effects.append(bullet.create_collision_effect())
+                                    enemy.bullets.remove(bullet)
                                 elif bullet.check_collision_with_tank(tank):
                                     collision_effects.append(bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
