@@ -1234,17 +1234,35 @@ def draw_autospin_indicator(tank):
 def draw_grid(tank):
     cols = SCREEN_WIDTH // TILE_SIZE + 2  # Number of tiles needed to fill the width
     rows = SCREEN_HEIGHT // TILE_SIZE + 2  # Number of tiles needed to fill the height
+
     # Calculate the offset based on the player's world position
     offset_x = tank.world_x % TILE_SIZE
     offset_y = tank.world_y % TILE_SIZE
+
+    # Calculate the starting world coordinates of the visible area
+    start_world_x = tank.world_x - tank.x
+    start_world_y = tank.world_y - tank.y
+
     # Loop through rows and columns and draw tiles
     for row in range(rows):
         for col in range(cols):
-            # Calculate tile position in world coordinates
+            # Calculate tile position in screen coordinates
             tile_x = col * TILE_SIZE - offset_x
             tile_y = row * TILE_SIZE - offset_y
-            # Draw the grid tile
-            pygame.draw.rect(screen, GRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+
+            # Calculate the world coordinates of this tile
+            world_tile_x = start_world_x + col * TILE_SIZE
+            world_tile_y = start_world_y + row * TILE_SIZE
+
+            # Check if the tile is within the world bounds
+            if (0 <= world_tile_x < WORLD_WIDTH and 0 <= world_tile_y < WORLD_HEIGHT):
+                # Draw the normal grid tile
+                pygame.draw.rect(screen, GRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+            else:
+                # Fill the out-of-bounds tile
+                pygame.draw.rect(screen, OUTOFBOUNDSCREENGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE))
+                # Draw the grid lines for out-of-bounds tiles
+                pygame.draw.rect(screen, OUTOFBOUNDSGRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
 
 def format_time(seconds):
     minutes, seconds = divmod(int(seconds), 60)
@@ -1543,7 +1561,7 @@ def game_loop():
 
         # Drawing
         draw_grid(tank)
-        draw_world_border(tank)
+        #draw_world_border(tank)
         draw_score(screen, tank.score)
         draw_level_info(screen, tank)
 
