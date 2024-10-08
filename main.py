@@ -438,7 +438,8 @@ class Enemy:
         if self.health <= 0:
             self.health = 0
             self.alive = False
-            tank.add_score(500)  # Add score for destroying an enemy
+            if tank is not None:  # Check if tank is not None
+                tank.add_score(500)  # Add score for destroying an enemy
         return self.alive
 
     def check_collision_with_enemies(self, enemies):
@@ -460,7 +461,7 @@ class Enemy:
                         point_x = self.world_x + math.cos(math.radians(angle)) * self.size
                         point_y = self.world_y + math.sin(math.radians(angle)) * self.size
                         if shape.point_inside_polygon(point_x, point_y):
-                            self.take_damage(5, shape)
+                            self.take_damage(5, None)  # Pass None instead of shape
                             shape.take_damage(5, self)
                             angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                             self.world_x += math.cos(angle) * 5
@@ -469,7 +470,7 @@ class Enemy:
                 else:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
-                        self.take_damage(5, shape)
+                        self.take_damage(5, None)  # Pass None instead of shape
                         shape.take_damage(5, self)
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
@@ -1138,16 +1139,16 @@ class Shape:
         other.center_x = other.world_x - math.cos(other.orbit_angle) * other.orbit_radius
         other.center_y = other.world_y - math.sin(other.orbit_angle) * other.orbit_radius
 
-    def take_damage(self, damage, tank=None):
+    def take_damage(self, damage, attacker=None):
         self.health -= damage
         if self.health <= 0:
-            if tank and isinstance(tank, Tank):  # Check if tank is an instance of Tank
+            if attacker and isinstance(attacker, Tank):  # Check if attacker is a Tank
                 if self.shape_type == "square":
-                    tank.add_score(10)
+                    attacker.add_score(10)
                 elif self.shape_type == "triangle":
-                    tank.add_score(25)
+                    attacker.add_score(25)
                 elif self.shape_type == "pentagon":
-                    tank.add_score(130)
+                    attacker.add_score(130)
             self.regenerate()
 
     def regenerate(self):
