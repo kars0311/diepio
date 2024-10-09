@@ -114,6 +114,11 @@ class Enemy:
         self.max_barrel_recoil = 10
         self.barrel_recoil_speed = 1
         self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
+        self.move_angle = 0
+        self.aim_angle = 0
+        self.rotation_speed = 0.1
+        self.smoothing_factor = 0.1
+        self.avoidance_radius = 150
         if self.tank_type == "twin":
             self.cannon_separation = self.size * 1.0
             self.cannon_length = 80
@@ -166,8 +171,8 @@ class Enemy:
 
     def draw_basic_cannon(self, screen_x, screen_y):
         recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        cannon_end_x = screen_x + math.cos(self.aim_angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.aim_angle) * recoil_adjusted_length
         self.draw_cannon(screen_x, screen_y, cannon_end_x, cannon_end_y)
 
     def draw_twin_cannons(self, screen_x, screen_y):
@@ -295,9 +300,9 @@ class Enemy:
 
     def shoot_basic(self):
         recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        bullet_x = self.world_x + math.cos(self.angle) * self.size
-        bullet_y = self.world_y + math.sin(self.angle) * self.size
-        self.create_bullet(bullet_x, bullet_y, self.angle)
+        bullet_x = self.world_x + math.cos(self.aim_angle) * self.size
+        bullet_y = self.world_y + math.sin(self.aim_angle) * self.size
+        self.create_bullet(bullet_x, bullet_y, self.aim_angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
     def shoot_twin(self):
@@ -361,6 +366,29 @@ class Enemy:
         bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1)
         self.bullets.append(bullet)
 
+    def calculate_avoidance_vector(self, shapes):
+        avoidance_x, avoidance_y = 0, 0
+        for shape in shapes:
+            if shape.alive:
+                dx = shape.world_x - self.world_x
+                dy = shape.world_y - self.world_y
+                distance = math.sqrt(dx * dx + dy * dy)
+                if distance < self.avoidance_radius + shape.size / 2:
+                    # Calculate avoidance force (inverse proportional to distance)
+                    force = (self.avoidance_radius + shape.size / 2 - distance) / self.avoidance_radius
+                    avoidance_x -= dx / distance * force
+                    avoidance_y -= dy / distance * force
+
+        if avoidance_x != 0 or avoidance_y != 0:
+            # Normalize avoidance vector
+            avoidance_mag = math.sqrt(avoidance_x * avoidance_x + avoidance_y * avoidance_y)
+            avoidance_x /= avoidance_mag
+            avoidance_y /= avoidance_mag
+
+            # Convert to angle
+            return math.atan2(avoidance_y, avoidance_x)
+        return 0
+
     def update(self, tank, shapes):
         if not self.alive:
             return
@@ -372,19 +400,37 @@ class Enemy:
                        abs(self.world_y - tank.world_y) < boundary_height / 2)
 
         if in_boundary:
-            self.target_player(tank)
+            self.target_player(tank, shapes)
         else:
             self.target_nearest_shape(shapes)
 
         # Move towards the target
         if self.target:
             angle_to_target = math.atan2(self.target[1] - self.world_y, self.target[0] - self.world_x)
-            self.world_x += math.cos(angle_to_target) * self.speed
-            self.world_y += math.sin(angle_to_target) * self.speed
-            self.angle = angle_to_target
+
+            # Calculate avoidance vector
+            avoidance_vector = self.calculate_avoidance_vector(shapes)
+
+            # Combine target direction with avoidance
+            desired_move_angle = angle_to_target + avoidance_vector
+
+            # Smooth out the movement angle
+            angle_diff = (desired_move_angle - self.move_angle + math.pi) % (2 * math.pi) - math.pi
+            self.move_angle += angle_diff * self.smoothing_factor
+
+            self.world_x += math.cos(self.move_angle) * self.speed
+            self.world_y += math.sin(self.move_angle) * self.speed
+
+            # Always aim at the player if in boundary
+            if in_boundary:
+                desired_aim_angle = math.atan2(tank.world_y - self.world_y, tank.world_x - self.world_x)
+                aim_angle_diff = (desired_aim_angle - self.aim_angle + math.pi) % (2 * math.pi) - math.pi
+                self.aim_angle += aim_angle_diff * self.rotation_speed
+            else:
+                self.aim_angle = self.move_angle
 
         # Shoot at the target
-        if self.shoot_cooldown <= 0 and self.target:
+        if self.shoot_cooldown <= 0 and self.target and in_boundary:
             self.shoot()
             if self.tank_type == "basic":
                 self.shoot_cooldown = 25
@@ -416,8 +462,48 @@ class Enemy:
 
         self.check_collision_with_shapes(shapes)
 
-    def target_player(self, tank):
-        self.target = (tank.world_x, tank.world_y)
+
+
+    def has_clear_path(self, target_x, target_y, shapes):
+        for shape in shapes:
+            if shape.alive:
+                # Check if the line between enemy and target intersects with the shape
+                if self.line_intersects_shape(self.world_x, self.world_y, target_x, target_y, shape):
+                    return False
+        return True
+
+    def line_intersects_shape(self, x1, y1, x2, y2, shape):
+        # Simplified intersection check (treating shapes as circles)
+        closest_point = self.closest_point_on_line(x1, y1, x2, y2, shape.world_x, shape.world_y)
+        distance = math.sqrt((closest_point[0] - shape.world_x) ** 2 + (closest_point[1] - shape.world_y) ** 2)
+        return distance < shape.size / 2
+
+    def closest_point_on_line(self, x1, y1, x2, y2, px, py):
+        line_len = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (line_len ** 2)
+        t = max(0, min(1, t))
+        return (x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+
+    def find_intermediate_target(self, target_x, target_y, shapes):
+        # Simple method: try a few random points around the enemy
+        for _ in range(10):
+            angle = random.uniform(0, 2 * math.pi)
+            distance = random.uniform(100, 300)
+            intermediate_x = self.world_x + math.cos(angle) * distance
+            intermediate_y = self.world_y + math.sin(angle) * distance
+            if self.has_clear_path(intermediate_x, intermediate_y, shapes):
+                self.target = (intermediate_x, intermediate_y)
+                return
+        # If no clear path found, just move towards the player (will be adjusted by avoidance)
+        self.target = (target_x, target_y)
+
+    def target_player(self, tank, shapes):
+        # Check if there's a clear path to the player
+        if self.has_clear_path(tank.world_x, tank.world_y, shapes):
+            self.target = (tank.world_x, tank.world_y)
+        else:
+            # Find an intermediate target to avoid obstacles
+            self.find_intermediate_target(tank.world_x, tank.world_y, shapes)
 
     def target_nearest_shape(self, shapes):
         nearest_shape = None
