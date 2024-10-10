@@ -445,8 +445,8 @@ class Enemy:
         return self.alive
 
     def regenerate(self):
-        self.world_x = random.randint(100, WORLD_WIDTH - 100)
-        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+        self.world_x = random.randint(50, WORLD_WIDTH - 50)
+        self.world_y = random.randint(50, WORLD_HEIGHT - 500)
         self.health = self.max_health
         self.alive = True
         self.score = 500  # Reset the enemy's score
