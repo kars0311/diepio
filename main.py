@@ -136,6 +136,7 @@ class Enemy:
             self.fire_rate = 2  # Lower fire rate for sniper
         else:
             self.barrel_recoil = [0]  # Single recoil for basic tank
+        self.score = 500
 
     def draw(self, tank):
         if not self.alive:
@@ -438,9 +439,17 @@ class Enemy:
         if self.health <= 0:
             self.health = 0
             self.alive = False
-            if tank is not None:  # Check if tank is not None
-                tank.add_score(500)  # Add score for destroying an enemy
+            if tank is not None and isinstance(tank, Tank):  # Check if tank is the player
+                tank.add_score(self.score)  # Give the enemy's score to the player
+            self.regenerate()  # Regenerate the enemy
         return self.alive
+
+    def regenerate(self):
+        self.world_x = random.randint(100, WORLD_WIDTH - 100)
+        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+        self.health = self.max_health
+        self.alive = True
+        self.score = 500  # Reset the enemy's score
 
     def check_collision_with_enemies(self, enemies):
         for enemy in enemies:
@@ -1142,13 +1151,13 @@ class Shape:
     def take_damage(self, damage, attacker=None):
         self.health -= damage
         if self.health <= 0:
-            if attacker and isinstance(attacker, Tank):  # Check if attacker is a Tank
+            if attacker and isinstance(attacker, Enemy):  # Check if attacker is an enemy
                 if self.shape_type == "square":
-                    attacker.add_score(10)
+                    attacker.score += 10
                 elif self.shape_type == "triangle":
-                    attacker.add_score(25)
+                    attacker.score += 25
                 elif self.shape_type == "pentagon":
-                    attacker.add_score(130)
+                    attacker.score += 130
             self.regenerate()
 
     def regenerate(self):
