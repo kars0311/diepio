@@ -415,7 +415,7 @@ class Enemy:
             if self.barrel_recoil[i] > 0:
                 self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
 
-        self.check_collision_with_shapes(shapes)
+        self.check_collision_with_shapes(shapes, tank)
 
     def target_player(self, tank):
         self.target = (tank.world_x, tank.world_y)
@@ -441,12 +441,22 @@ class Enemy:
             self.alive = False
             if tank is not None and isinstance(tank, Tank):  # Check if tank is the player
                 tank.add_score(4*self.score//5)  # Give the enemy's score to the player
-            self.regenerate()  # Regenerate the enemy
+                self.regenerate(tank)  # Regenerate the enemy
         return self.alive
 
-    def regenerate(self):
-        self.world_x = random.randint(50, WORLD_WIDTH - 50)
-        self.world_y = random.randint(50, WORLD_HEIGHT - 500)
+    def regenerate(self, tank):
+        # Keep trying to find a suitable spawn location
+        while True:
+            self.world_x = random.randint(50, WORLD_WIDTH - 50)
+            self.world_y = random.randint(50, WORLD_HEIGHT - 50)
+
+            # Calculate distance from the tank
+            distance = math.sqrt((self.world_x - tank.world_x) ** 2 + (self.world_y - tank.world_y) ** 2)
+
+            # If the enemy is far enough from the tank, break the loop
+            if distance > 1000:  # Adjust this value as needed
+                break
+
         self.health = self.max_health
         self.alive = True
         self.score = 500  # Reset the enemy's score
@@ -462,7 +472,7 @@ class Enemy:
                 enemy.world_x -= math.cos(angle) * push_distance / 2
                 enemy.world_y -= math.sin(angle) * push_distance / 2
 
-    def check_collision_with_shapes(self, shapes):
+    def check_collision_with_shapes(self, shapes, tank):
         for shape in shapes:
             if shape.alive:
                 if shape.shape_type == "pentagon":
@@ -470,7 +480,7 @@ class Enemy:
                         point_x = self.world_x + math.cos(math.radians(angle)) * self.size
                         point_y = self.world_y + math.sin(math.radians(angle)) * self.size
                         if shape.point_inside_polygon(point_x, point_y):
-                            self.take_damage(5, None)  # Pass None instead of shape
+                            self.take_damage(5, tank)  # Pass None instead of shape
                             shape.take_damage(5, self)
                             angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                             self.world_x += math.cos(angle) * 5
@@ -479,7 +489,7 @@ class Enemy:
                 else:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
-                        self.take_damage(5, None)  # Pass None instead of shape
+                        self.take_damage(5, tank)  # Pass None instead of shape
                         shape.take_damage(5, self)
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
@@ -523,6 +533,7 @@ class Tank:
         self.score = 0
         self.tank_type = "basic"
         self.upgrade_available = False
+
 
     def upgrade_to_twin(self):
         self.tank_type = "twin"
@@ -1483,6 +1494,7 @@ def draw_level_info(screen, tank):
 
 def game_loop():
     global game_over, killer_object
+
 
     # Show menu and get player choice
     include_enemies = draw_menu(screen, clock)
