@@ -221,6 +221,14 @@ class Enemy:
 
         pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
 
+        # Draw outline
+        outline_thickness = 3
+        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
+        # Draw the flat end of the barrel
+        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
+        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
+
     def draw_sniper_cannon(self, screen_x, screen_y):
         recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
         cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
