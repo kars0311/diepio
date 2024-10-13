@@ -489,7 +489,7 @@ class Enemy:
                         point_y = self.world_y + math.sin(math.radians(angle)) * self.size
                         if shape.point_inside_polygon(point_x, point_y):
                             self.take_damage(5, tank)  # Pass None instead of shape
-                            shape.take_damage(5, self)
+                            shape.take_damage(5)
                             angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                             self.world_x += math.cos(angle) * 5
                             self.world_y += math.sin(angle) * 5
@@ -498,7 +498,7 @@ class Enemy:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
                         self.take_damage(5, tank)  # Pass None instead of shape
-                        shape.take_damage(5, self)
+                        shape.take_damage(5)
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
                         self.world_x += math.cos(angle) * push_distance / 2
@@ -942,7 +942,7 @@ class Tank:
                         point_y = self.world_y + math.sin(math.radians(angle)) * self.size
                         if shape.point_inside_polygon(point_x, point_y):
                             self.take_damage(5, shape)
-                            shape.take_damage(5, self)
+                            shape.take_damage(5)
                             angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                             self.world_x += math.cos(angle) * 5
                             self.world_y += math.sin(angle) * 5
@@ -951,7 +951,7 @@ class Tank:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
                         self.take_damage(5, shape)
-                        shape.take_damage(5, self)
+                        shape.take_damage(5)
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
                         self.world_x += math.cos(angle) * push_distance / 2
@@ -1011,12 +1011,12 @@ class Bullet:
             if shape.alive:
                 if shape.shape_type == "pentagon":
                     if shape.point_inside_polygon(self.world_x, self.world_y):
-                        shape.take_damage(self.damage, tank)
+                        shape.take_damage(self.damage)
                         return True
                 else:
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.radius + shape.size // 2:
-                        shape.take_damage(self.damage, tank)
+                        shape.take_damage(self.damage)
                         return True
         return False
 
@@ -1082,7 +1082,7 @@ def initialize_enemies():
     return enemies
 
 class Shape:
-    def __init__(self, x, y, shape_type, outline_thickness=4):
+    def __init__(self, x, y, shape_type, tank, outline_thickness=4):
         self.world_x = x
         self.world_y = y
         self.shape_type = shape_type
@@ -1091,6 +1091,7 @@ class Shape:
         self.rotation_direction = random.choice([-1, 1])
         self.points = []
         self.outline_thickness = outline_thickness  # New attribute for outline thickness
+        self.tank = tank  # Store the tank object
 
         if shape_type == "square":
             self.size, self.health, self.max_health, self.color, self.outline_color = 40, 100, 100, SQUAREYELLOW, SQUAREOUTLINE
@@ -1167,16 +1168,15 @@ class Shape:
         other.center_x = other.world_x - math.cos(other.orbit_angle) * other.orbit_radius
         other.center_y = other.world_y - math.sin(other.orbit_angle) * other.orbit_radius
 
-    def take_damage(self, damage, attacker=None):
+    def take_damage(self, damage):
         self.health -= damage
         if self.health <= 0:
-            if attacker and isinstance(attacker, Enemy):  # Check if attacker is an enemy
-                if self.shape_type == "square":
-                    attacker.score += 10
-                elif self.shape_type == "triangle":
-                    attacker.score += 25
-                elif self.shape_type == "pentagon":
-                    attacker.score += 130
+            if self.shape_type == "square":
+                self.tank.score += 10
+            elif self.shape_type == "triangle":
+                self.tank.score += 25
+            elif self.shape_type == "pentagon":
+                self.tank.score += 130
             self.regenerate()
 
     def regenerate(self):
@@ -1461,16 +1461,16 @@ def draw_minimap_indicator(mode):
 
     screen.blit(text_surface, (indicator_x, indicator_y))
 
-def initialize_shapes():
+def initialize_shapes(tank):
     shapes = [
-        Shape(1000, 1000, "square"),
-        Shape(1200, 1200, "triangle"),
-        Shape(1500, 1500, "pentagon"),
+        Shape(1000, 1000, "square", tank),
+        Shape(1200, 1200, "triangle", tank),
+        Shape(1500, 1500, "pentagon", tank),
     ]
     for _ in range(50):
-        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "square"))
-        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "triangle"))
-        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "pentagon"))
+        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "square", tank))
+        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "triangle", tank))
+        shapes.append(Shape(random.randint(100, 4900), random.randint(100, 4900), "pentagon", tank))
     return shapes
 
 def draw_level_info(screen, tank):
@@ -1510,7 +1510,7 @@ def game_loop():
         return
 
     tank = Tank()
-    shapes = initialize_shapes()
+    shapes = initialize_shapes(tank)
     enemies = initialize_enemies() if include_enemies else []
     running = True
     minimap_mode = 0  # Start with all elements visible
