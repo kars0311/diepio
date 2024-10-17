@@ -447,7 +447,7 @@ class Enemy:
         if self.health <= 0:
             self.health = 0
             self.alive = False
-            if tank is not None and isinstance(tank, Tank):  # Check if tank is the player
+            if tank is not None and isinstance(tank, Player):  # Check if tank is the player
                 tank.add_score(4*self.score//5)  # Give the enemy's score to the player
                 self.regenerate(tank)  # Regenerate the enemy
         return self.alive
@@ -507,7 +507,7 @@ class Enemy:
                         shape.world_y -= math.sin(angle) * push_distance / 2
 
 
-class Tank:
+class Player:
     def __init__(self):
         self.x = SCREEN_WIDTH // 2
         self.y = SCREEN_HEIGHT // 2
@@ -1509,8 +1509,8 @@ def game_loop():
     if include_enemies is None:  # Player closed the window
         return
 
-    tank = Tank()
-    shapes = initialize_shapes(tank)
+    player = Player()
+    shapes = initialize_shapes(player)
     enemies = initialize_enemies() if include_enemies else []
     running = True
     minimap_mode = 0  # Start with all elements visible
@@ -1530,27 +1530,27 @@ def game_loop():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
-                if tank.shoot_cooldown <= 0:
-                    tank.shoot()
+                if player.shoot_cooldown <= 0:
+                    player.shoot()
                 if event.button == 1:  # Left mouse button
-                    if handle_upgrade_click(tank, event.pos):
+                    if handle_upgrade_click(player, event.pos):
                         continue  # Skip the rest of the loop if an upgrade was selected
-                    if tank.shoot_cooldown <= 0:
-                        tank.shoot()
+                    if player.shoot_cooldown <= 0:
+                        player.shoot()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_e:
-                    tank.autofire = not tank.autofire
+                    player.autofire = not player.autofire
                 if event.key == pygame.K_c:
-                    tank.autospin = not tank.autospin
+                    player.autospin = not player.autospin
                 if event.key == pygame.K_o:
-                    tank.take_damage(tank.health, "Self-Destruct")
+                    player.take_damage(player.health, "Self-Destruct")
                 if event.key == pygame.K_TAB:
                     minimap_mode = (minimap_mode + 1) % 5
         # Add the new key handling logic here
         keys = pygame.key.get_pressed()
         if keys[pygame.K_k]:
             if level_up_cooldown == 0:
-                tank.level_up()
+                player.level_up()
                 level_up_cooldown = max(level_up_cooldown_min,
                                         level_up_cooldown_max - level_up_hold_time // 2)
                 level_up_hold_time += 1
@@ -1563,9 +1563,9 @@ def game_loop():
 
         if not game_over:
             keys_pressed = pygame.key.get_pressed()
-            tank.update(keys_pressed)
-            tank.rotate_to_mouse(pygame.mouse.get_pos())
-            tank.handle_autofire()
+            player.update(keys_pressed)
+            player.rotate_to_mouse(pygame.mouse.get_pos())
+            player.handle_autofire()
 
             for shape in shapes:
                 shape.update(shapes)
@@ -1573,37 +1573,37 @@ def game_loop():
             if include_enemies:
                 for enemy in enemies[:]:
                     if enemy.alive:
-                        enemy.update(tank, shapes)
+                        enemy.update(player, shapes)
                     else:
                         enemies.remove(enemy)
 
-                tank.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
+                player.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
 
-            tank.check_collision_with_shapes(shapes)
-            tank.update_level()
+            player.check_collision_with_shapes(shapes)
+            player.update_level()
             # Handle player bullets
-            for bullet in tank.bullets[:]:
+            for bullet in player.bullets[:]:
                 bullet.update()
                 if bullet.off_screen():
                     collision_effects.append(bullet.create_collision_effect())
-                    tank.bullets.remove(bullet)
-                elif bullet.check_collision(shapes, tank):
+                    player.bullets.remove(bullet)
+                elif bullet.check_collision(shapes, player):
                     collision_effects.append(bullet.create_collision_effect())
-                    tank.bullets.remove(bullet)
+                    player.bullets.remove(bullet)
                 elif include_enemies:
                     enemy_bullet = bullet.check_collision_with_bullets([b for e in enemies for b in e.bullets])
                     if enemy_bullet:
                         collision_effects.append(bullet.create_collision_effect())
                         collision_effects.append(enemy_bullet.create_collision_effect())
-                        tank.bullets.remove(bullet)
+                        player.bullets.remove(bullet)
                         for enemy in enemies:
                             if enemy_bullet in enemy.bullets:
                                 enemy.bullets.remove(enemy_bullet)
                                 break
                     elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive],
-                                                             tank):  # Pass tank here
+                                                             player):  # Pass tank here
                         collision_effects.append(bullet.create_collision_effect())
-                        tank.bullets.remove(bullet)
+                        player.bullets.remove(bullet)
 
             # Handle enemy bullets
             if include_enemies:
@@ -1616,53 +1616,53 @@ def game_loop():
                                 collision_effects.append(bullet.create_collision_effect())
                                 enemy.bullets.remove(bullet)
                             else:
-                                player_bullet = bullet.check_collision_with_bullets(tank.bullets)
+                                player_bullet = bullet.check_collision_with_bullets(player.bullets)
                                 if player_bullet:
                                     collision_effects.append(bullet.create_collision_effect())
                                     collision_effects.append(player_bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
-                                    tank.bullets.remove(player_bullet)
-                                elif bullet.check_collision(shapes, tank):
+                                    player.bullets.remove(player_bullet)
+                                elif bullet.check_collision(shapes, player):
                                     collision_effects.append(bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
-                                elif bullet.check_collision_with_tank(tank):
+                                elif bullet.check_collision_with_tank(player):
                                     collision_effects.append(bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
 
         # Drawing
-        draw_grid(tank)
+        draw_grid(player)
         #draw_world_border(tank)
-        draw_score(screen, tank.score)
-        draw_level_info(screen, tank)
+        draw_score(screen, player.score)
+        draw_level_info(screen, player)
 
         for shape in shapes:
-            shape.draw(tank)
+            shape.draw(player)
 
         if include_enemies:
             for enemy in enemies:
                 if enemy.alive:
-                    enemy.draw(tank)
+                    enemy.draw(player)
                     for bullet in enemy.bullets:
-                        bullet.draw(tank)
+                        bullet.draw(player)
 
         for effect in collision_effects[:]:
             effect.update()
-            effect.draw(tank)
+            effect.draw(player)
             if effect.is_finished():
                 collision_effects.remove(effect)
 
-        tank.draw()
-        for bullet in tank.bullets:
-            bullet.draw(tank)
+        player.draw()
+        for bullet in player.bullets:
+            bullet.draw(player)
 
         # Draw upgrade buttons after drawing the tank
-        draw_upgrade_buttons(screen, tank)
+        draw_upgrade_buttons(screen, player)
 
         if minimap_mode > 0:
-            draw_minimap(tank, shapes, enemies, minimap_mode)
+            draw_minimap(player, shapes, enemies, minimap_mode)
 
-        draw_autofire_indicator(tank)
-        draw_autospin_indicator(tank)
+        draw_autofire_indicator(player)
+        draw_autospin_indicator(player)
         draw_minimap_indicator(minimap_mode)
 
         pygame.display.flip()
@@ -1670,10 +1670,10 @@ def game_loop():
 
         if game_over:
             survival_time = time.time() - start_time
-            death_screen(screen, clock, killer_object, survival_time, tank.score)
+            death_screen(screen, clock, killer_object, survival_time, player.score)
             game_over = False
-            tank.respawn()
-            tank.score = 0  # Reset score on respawn
+            player.respawn()
+            player.score = 0  # Reset score on respawn
             start_time = time.time()
 
     pygame.quit()
