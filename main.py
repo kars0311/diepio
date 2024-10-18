@@ -18,7 +18,7 @@ UPGRADE_BUTTON_HEIGHT = 40
 UPGRADE_BUTTON_MARGIN = 10
 
 levels = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45])
-scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 787, 938, 1109, 1301, 1516, 1757, 2026, 2325, 2658, 3026, 3433, 3883, 4379, 4925, 5525, 6184, 6907, 7698, 8537, 9426, 10368, 11367, 12426, 13549, 14739, 16000, 17337, 18754, 20256, 21849, 23536])
+scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 7870, 9380, 11090, 13010, 15160, 17570, 20260, 23250, 26580, 30260, 34330, 38830, 43790, 49250, 55250, 61840, 69070, 76980, 85370, 94260, 103680, 113670, 124260, 135490, 147390, 160000, 173370, 187540, 202560, 218490, 235360])
 
 # Minimap visibility
 minimap_visible = True  # Start with the minimap visible by default
@@ -504,7 +504,10 @@ class Enemy(Tank):
         super().take_damage(damage)
         if self.health <= 0:
             if isinstance(tank, Player):
-                tank.add_score(4 * self.score // 5)
+                if self.score<23536:
+                    tank.add_score(self.score)
+                else:
+                    tank.add_score(23536)
             self.regenerate(tank)
         return self.alive
 
@@ -530,6 +533,10 @@ class Enemy(Tank):
                     self.world_y += math.sin(angle) * push_distance / 2
                     enemy.world_x -= math.cos(angle) * push_distance / 2
                     enemy.world_y -= math.sin(angle) * push_distance / 2
+
+    def add_score(self, points):
+        self.score += points
+        # Note: Enemies don't have levels, so we don't need to update levels here
 
 # Subclass for Player
 class Player(Tank):
@@ -973,16 +980,23 @@ class Shape:
         other.center_x = other.world_x - math.cos(other.orbit_angle) * other.orbit_radius
         other.center_y = other.world_y - math.sin(other.orbit_angle) * other.orbit_radius
 
-    def take_damage(self, damage):
+    def take_damage(self, damage, attacker=None):
         self.health -= damage
         if self.health <= 0:
-            if self.shape_type == "square":
-                self.tank.add_score(10)
-            elif self.shape_type == "triangle":
-                self.tank.add_score(25)
-            elif self.shape_type == "pentagon":
-                self.tank.add_score(130)
+            if isinstance(attacker, Player):
+                attacker.add_score(self.get_score_value())
+            elif isinstance(attacker, Enemy):
+                attacker.add_score(self.get_score_value())
             self.regenerate()
+
+    def get_score_value(self):
+        if self.shape_type == "square":
+            return 10
+        elif self.shape_type == "triangle":
+            return 25
+        elif self.shape_type == "pentagon":
+            return 130
+        return 0
 
     def regenerate(self):
         self.world_x = random.randint(100, WORLD_WIDTH - 100)
@@ -1473,7 +1487,10 @@ def game_loop():
             survival_time = time.time() - start_time
             death_screen(screen, clock, killer_object, survival_time, player.score)
             game_over = False
-            halfscore = scores[player.level//2]
+            respawnlevel= player.level//2-11
+            if respawnlevel < 0:
+                respawnlevel = 0
+            halfscore = scores[respawnlevel]
             player = Player()
             player.score=halfscore
             start_time = time.time()
