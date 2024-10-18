@@ -1468,15 +1468,14 @@ def game_loop():
 
         pygame.display.flip()
         clock.tick(60)
-        for enemy in enemies:
-            print(enemy.alive)
 
         if game_over:
             survival_time = time.time() - start_time
             death_screen(screen, clock, killer_object, survival_time, player.score)
             game_over = False
-            player.respawn()
-            player.score = 0
+            halfscore = scores[player.level//2]
+            player = Player()
+            player.score=halfscore
             start_time = time.time()
 
     pygame.quit()
