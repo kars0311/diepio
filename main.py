@@ -95,14 +95,15 @@ def draw_menu(screen, clock):
 
         clock.tick(60)
 
-class Enemy:
-    def __init__(self, x, y):
+# Superclass for Tank
+class Tank:
+    def __init__(self, x, y, size, speed, color):
         self.world_x = x
         self.world_y = y
-        self.size = 40
-        self.speed = 3
+        self.size = size
+        self.speed = speed
         self.angle = 0
-        self.color = RED
+        self.color = color
         self.bullets = []
         self.shoot_cooldown = 0
         self.cannon_length = 75
@@ -110,168 +111,46 @@ class Enemy:
         self.health = 500
         self.max_health = 500
         self.alive = True
-        self.target = None
+        self.barrel_recoil = [0]
         self.max_barrel_recoil = 10
         self.barrel_recoil_speed = 1
-        self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
-        if self.tank_type == "twin":
-            self.cannon_separation = self.size * 1.0
-            self.cannon_length = 80
-            self.next_cannon = 1
-            self.barrel_recoil = [0, 0]  # Separate recoil for each barrel
-            self.twin_fire_mode = random.choice(["alternate", "simultaneous"])
-        elif self.tank_type == "flank":
-            self.front_cannon_length = 75
-            self.back_cannon_length = 60
-            self.barrel_recoil = [0, 0]  # Separate recoil for front and back cannons
-        elif self.tank_type == "machine_gun":
-            self.cannon_length = 70
-            self.cannon_thickness = 50  # Wider at the base
-            self.barrel_recoil = [0]
-            self.fire_rate = 5  # Higher fire rate for machine gun
-        elif self.tank_type == "sniper":
-            self.cannon_length = 90
-            self.cannon_thickness = 30
-            self.barrel_recoil = [0]
-            self.fire_rate = 2  # Lower fire rate for sniper
-        else:
-            self.barrel_recoil = [0]  # Single recoil for basic tank
         self.score = 500
+        self.tank_type = "basic"
+        self.recoil_velocity_x = 0
+        self.recoil_velocity_y = 0
+        self.recoil_dampening = 0.45
+        self.max_recoil_speed = 2
+        self.regen_rate = 0.1
+        self.regen_cooldown = 0
+        self.regen_cooldown_max = 180
 
-    def draw(self, tank):
+    def draw(self, screen):
         if not self.alive:
             return
 
-        screen_x = self.world_x - tank.world_x + tank.x
-        screen_y = self.world_y - tank.world_y + tank.y
+        screen_x = self.world_x - self.world_x + self.x
+        screen_y = self.world_y - self.world_y + self.y
 
         if self.tank_type == "basic":
-            self.draw_basic_cannon(screen_x, screen_y)
+            self.draw_basic_cannon(screen, screen_x, screen_y)
         elif self.tank_type == "twin":
-            self.draw_twin_cannons(screen_x, screen_y)
+            self.draw_twin_cannons(screen, screen_x, screen_y)
         elif self.tank_type == "flank":
-            self.draw_flank_cannons(screen_x, screen_y)
+            self.draw_flank_cannons(screen, screen_x, screen_y)
         elif self.tank_type == "machine_gun":
-            self.draw_machine_gun_cannon(screen_x, screen_y)
+            self.draw_machine_gun_cannon(screen, screen_x, screen_y)
         elif self.tank_type == "sniper":
-            self.draw_sniper_cannon(screen_x, screen_y)
+            self.draw_sniper_cannon(screen, screen_x, screen_y)
 
-        # Draw enemy outline
-        pygame.draw.circle(screen, ENEMYOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
+        # Draw tank outline
+        pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
 
-        # Draw enemy body
+        # Draw tank body
         pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
 
-        # Draw health bar
-        self.draw_health_bar(screen_x, screen_y)
+        self.draw_health_bar(screen, screen_x, screen_y)
 
-    def draw_basic_cannon(self, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen_x, screen_y, cannon_end_x, cannon_end_y)
-
-    def draw_twin_cannons(self, screen_x, screen_y):
-        for i in [-1, 1]:
-            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
-            cannon_start_x = screen_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_y = screen_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_x -= math.cos(self.angle) * self.size * 0.1
-            cannon_start_y -= math.sin(self.angle) * self.size * 0.1
-            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
-            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
-            self.draw_cannon(cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y)
-
-    def draw_flank_cannons(self, screen_x, screen_y):
-        # Draw front cannon
-        recoil_adjusted_length = self.front_cannon_length - self.barrel_recoil[0]
-        front_cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        front_cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen_x, screen_y, front_cannon_end_x, front_cannon_end_y)
-
-        # Draw back cannon
-        back_angle = self.angle + math.pi
-        recoil_adjusted_length = self.back_cannon_length - self.barrel_recoil[1]
-        back_cannon_end_x = screen_x + math.cos(back_angle) * recoil_adjusted_length
-        back_cannon_end_y = screen_y + math.sin(back_angle) * recoil_adjusted_length
-        self.draw_cannon(screen_x, screen_y, back_cannon_end_x, back_cannon_end_y)
-
-    def draw_machine_gun_cannon(self, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-
-        # Calculate the funnel shape
-        base_width = self.cannon_thickness *0.75
-        tip_width = self.cannon_thickness * 1.0  # Thicker at the tip
-
-        # Calculate the four corners of the funnel
-        perpendicular_angle = self.angle + math.pi / 2
-        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
-        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
-        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
-        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
-
-        cannon_corners = [
-            (screen_x + base_offset_x, screen_y + base_offset_y),
-            (screen_x - base_offset_x, screen_y - base_offset_y),
-            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
-            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        ]
-
-        pygame.draw.polygon(screen, (150, 150, 150), cannon_corners)
-
-        # Draw outline
-        outline_thickness = 3
-        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
-        # Draw the flat end of the barrel
-        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
-        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
-
-    def draw_sniper_cannon(self, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen_x, screen_y, cannon_end_x, cannon_end_y)
-
-    def draw_cannon(self, start_x, start_y, end_x, end_y):
-        perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
-        half_thickness = self.cannon_thickness / 2
-        outline_thickness = 3  # Adjust this value to change the outline thickness
-
-        # Calculate corners for the outline
-        outline_offset_x = math.cos(perpendicular_angle) * (half_thickness + outline_thickness)
-        outline_offset_y = math.sin(perpendicular_angle) * (half_thickness + outline_thickness)
-        outline_corners = [
-            (start_x + outline_offset_x, start_y + outline_offset_y),
-            (start_x - outline_offset_x, start_y - outline_offset_y),
-            (end_x - outline_offset_x, end_y - outline_offset_y),
-            (end_x + outline_offset_x, end_y + outline_offset_y)
-        ]
-
-        # Draw the outline
-        pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_corners)
-
-        # Calculate corners for the main cannon body
-        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
-        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
-        cannon_corners = [
-            (start_x + corner_offset_x, start_y + corner_offset_y),
-            (start_x - corner_offset_x, start_y - corner_offset_y),
-            (end_x - corner_offset_x, end_y - corner_offset_y),
-            (end_x + corner_offset_x, end_y + corner_offset_y)
-        ]
-
-        # Draw the main cannon body
-        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
-
-        # Draw the flat end of the barrel
-        end_line_start = (end_x - outline_offset_x, end_y - outline_offset_y)
-        end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
-        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
-
-    def draw_health_bar(self, screen_x, screen_y):
+    def draw_health_bar(self, screen, screen_x, screen_y):
         if self.health < self.max_health:
             health_bar_width = self.size * 2
             health_bar_height = 5
@@ -289,6 +168,263 @@ class Enemy:
                 health_bar_width,
                 health_bar_height
             ), 1)
+
+    def draw_cannon(self, screen, start_x, start_y, end_x, end_y):
+        perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
+        half_thickness = self.cannon_thickness / 2
+        outline_thickness = 3
+
+        outline_offset_x = math.cos(perpendicular_angle) * (half_thickness + outline_thickness)
+        outline_offset_y = math.sin(perpendicular_angle) * (half_thickness + outline_thickness)
+        outline_corners = [
+            (start_x + outline_offset_x, start_y + outline_offset_y),
+            (start_x - outline_offset_x, start_y - outline_offset_y),
+            (end_x - outline_offset_x, end_y - outline_offset_y),
+            (end_x + outline_offset_x, end_y + outline_offset_y)
+        ]
+
+        pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_corners)
+
+        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
+        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
+        cannon_corners = [
+            (start_x + corner_offset_x, start_y + corner_offset_y),
+            (start_x - corner_offset_x, start_y - corner_offset_y),
+            (end_x - corner_offset_x, end_y - corner_offset_y),
+            (end_x + corner_offset_x, end_y + corner_offset_y)
+        ]
+
+        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
+
+        end_line_start = (end_x - outline_offset_x, end_y - outline_offset_y)
+        end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
+
+    def draw_basic_cannon(self, screen, screen_x, screen_y):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y)
+
+    def draw_twin_cannons(self, screen, screen_x, screen_y):
+        for i in [-1, 1]:
+            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
+            cannon_start_x = screen_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2
+            cannon_start_y = screen_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2
+            cannon_start_x -= math.cos(self.angle) * self.size * 0.1
+            cannon_start_y -= math.sin(self.angle) * self.size * 0.1
+            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+            self.draw_cannon(screen, cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y)
+
+    def draw_flank_cannons(self, screen, screen_x, screen_y):
+        recoil_adjusted_length = self.front_cannon_length - self.barrel_recoil[0]
+        front_cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        front_cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, front_cannon_end_x, front_cannon_end_y)
+
+        back_angle = self.angle + math.pi
+        recoil_adjusted_length = self.back_cannon_length - self.barrel_recoil[1]
+        back_cannon_end_x = screen_x + math.cos(back_angle) * recoil_adjusted_length
+        back_cannon_end_y = screen_y + math.sin(back_angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, back_cannon_end_x, back_cannon_end_y)
+
+    def draw_machine_gun_cannon(self, screen, screen_x, screen_y):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+
+        base_width = self.cannon_thickness * 0.75
+        tip_width = self.cannon_thickness * 1
+
+        perpendicular_angle = self.angle + math.pi / 2
+        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
+        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
+        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
+        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
+
+        cannon_corners = [
+            (screen_x + base_offset_x, screen_y + base_offset_y),
+            (screen_x - base_offset_x, screen_y - base_offset_y),
+            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
+            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        ]
+
+        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
+
+        outline_thickness = 3
+        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
+
+        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
+        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
+
+    def draw_sniper_cannon(self, screen, screen_x, screen_y):
+        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y)
+
+    def create_bullet(self, x, y, angle):
+        bullet_speed = 8
+        if self.tank_type == "sniper":
+            bullet_speed = 12
+        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1 if isinstance(self, Enemy) else 0)
+        self.bullets.append(bullet)
+
+    def take_damage(self, damage, attacker=None):
+        self.health -= damage
+        if self.health <= 0:
+            self.health = 0
+            self.alive = False
+        return self.alive
+
+    def check_collision_with_shapes(self, shapes):
+        for shape in shapes:
+            if shape.alive:
+                if shape.shape_type == "pentagon":
+                    for angle in range(0, 360, 30):
+                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
+                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
+                        if shape.point_inside_polygon(point_x, point_y):
+                            self.take_damage(5, shape)
+                            shape.take_damage(5)
+                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                            self.world_x += math.cos(angle) * 5
+                            self.world_y += math.sin(angle) * 5
+                            break
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.size + shape.size // 2:
+                        self.take_damage(5, shape)
+                        shape.take_damage(5)
+                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                        push_distance = (self.size + shape.size // 2) - distance
+                        self.world_x += math.cos(angle) * push_distance / 2
+                        self.world_y += math.sin(angle) * push_distance / 2
+                        shape.world_x -= math.cos(angle) * push_distance / 2
+                        shape.world_y -= math.sin(angle) * push_distance / 2
+
+# Subclass for Enemy
+class Enemy(Tank):
+    def __init__(self, x, y):
+        super().__init__(x, y, size=40, speed=3, color=RED)
+        self.target = None
+        self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
+        self.score = 500
+        if self.tank_type == "twin":
+            self.cannon_separation = self.size * 1.0
+            self.cannon_length = 80
+            self.next_cannon = 1
+            self.barrel_recoil = [0, 0]
+            self.twin_fire_mode = random.choice(["alternate", "simultaneous"])
+        elif self.tank_type == "flank":
+            self.front_cannon_length = 75
+            self.back_cannon_length = 60
+            self.barrel_recoil = [0, 0]
+        elif self.tank_type == "machine_gun":
+            self.cannon_length = 70
+            self.cannon_thickness = 50
+            self.barrel_recoil = [0]
+            self.fire_rate = 5
+        elif self.tank_type == "sniper":
+            self.cannon_length = 90
+            self.cannon_thickness = 30
+            self.barrel_recoil = [0]
+            self.fire_rate = 2
+
+    def draw(self, tank):
+        if not self.alive:
+            return
+
+        screen_x = self.world_x - tank.world_x + tank.x
+        screen_y = self.world_y - tank.world_y + tank.y
+
+        if self.tank_type == "basic":
+            self.draw_basic_cannon(screen, screen_x, screen_y)
+        elif self.tank_type == "twin":
+            self.draw_twin_cannons(screen, screen_x, screen_y)
+        elif self.tank_type == "flank":
+            self.draw_flank_cannons(screen, screen_x, screen_y)
+        elif self.tank_type == "machine_gun":
+            self.draw_machine_gun_cannon(screen, screen_x, screen_y)
+        elif self.tank_type == "sniper":
+            self.draw_sniper_cannon(screen, screen_x, screen_y)
+
+        # Draw enemy outline
+        pygame.draw.circle(screen, ENEMYOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
+
+        # Draw enemy body
+        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
+
+        self.draw_health_bar(screen, screen_x, screen_y)
+
+    def update(self, tank, shapes):
+        if not self.alive:
+            return
+
+        boundary_width = SCREEN_WIDTH * 1.5
+        boundary_height = SCREEN_HEIGHT * 1.5
+        in_boundary = (abs(self.world_x - tank.world_x) < boundary_width / 2 and
+                       abs(self.world_y - tank.world_y) < boundary_height / 2)
+
+        if in_boundary:
+            self.target_player(tank)
+        else:
+            self.target_nearest_shape(shapes)
+
+        if self.target:
+            angle_to_target = math.atan2(self.target[1] - self.world_y, self.target[0] - self.world_x)
+            self.world_x += math.cos(angle_to_target) * self.speed
+            self.world_y += math.sin(angle_to_target) * self.speed
+            self.angle = angle_to_target
+
+        if self.shoot_cooldown <= 0 and self.target:
+            self.shoot()
+            if self.tank_type == "basic":
+                self.shoot_cooldown = 25
+            elif self.tank_type == "twin":
+                if self.twin_fire_mode == "simultaneous":
+                    self.shoot_cooldown = 20
+                else:
+                    self.shoot_cooldown = 10
+            elif self.tank_type == "flank":
+                self.shoot_cooldown = 25
+            elif self.tank_type == "machine_gun":
+                self.shoot_cooldown = 10
+            elif self.tank_type == "sniper":
+                self.shoot_cooldown = 30
+
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= 1
+
+        for bullet in self.bullets[:]:
+            bullet.update()
+            if bullet.off_screen():
+                self.bullets.remove(bullet)
+
+        for i in range(len(self.barrel_recoil)):
+            if self.barrel_recoil[i] > 0:
+                self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
+
+        self.check_collision_with_shapes(shapes)
+
+    def target_player(self, tank):
+        self.target = (tank.world_x, tank.world_y)
+
+    def target_nearest_shape(self, shapes):
+        nearest_shape = None
+        min_distance = float('inf')
+        for shape in shapes:
+            if shape.alive:
+                distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_shape = shape
+        if nearest_shape:
+            self.target = (nearest_shape.world_x, nearest_shape.world_y)
+        else:
+            self.target = None
 
     def shoot(self):
         if self.tank_type == "basic":
@@ -318,28 +454,30 @@ class Enemy:
     def shoot_twin_alternate(self):
         i = 1 if self.next_cannon == 1 else -1
         recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
-        bullet_x = self.world_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.cos(self.angle) * self.size * 0.9
-        bullet_y = self.world_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.sin(self.angle) * self.size * 0.9
+        bullet_x = self.world_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.cos(
+            self.angle) * self.size * 0.9
+        bullet_y = self.world_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.sin(
+            self.angle) * self.size * 0.9
         self.create_bullet(bullet_x, bullet_y, self.angle)
         self.barrel_recoil[(i + 1) // 2] = self.max_barrel_recoil
-        self.next_cannon = 3 - self.next_cannon  # Switch between 1 and 2
+        self.next_cannon = 3 - self.next_cannon
 
     def shoot_twin_simultaneous(self):
         for i in [-1, 1]:
             recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
-            bullet_x = self.world_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.cos(self.angle) * self.size * 0.9
-            bullet_y = self.world_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2 + math.sin(self.angle) * self.size * 0.9
+            bullet_x = self.world_x + i * math.cos(
+                self.angle + math.pi / 2) * self.cannon_separation / 2 + math.cos(self.angle) * self.size * 0.9
+            bullet_y = self.world_y + i * math.sin(
+                self.angle + math.pi / 2) * self.cannon_separation / 2 + math.sin(self.angle) * self.size * 0.9
             self.create_bullet(bullet_x, bullet_y, self.angle)
             self.barrel_recoil[(i + 1) // 2] = self.max_barrel_recoil
 
     def shoot_flank(self):
-        # Shoot front cannon
         front_bullet_x = self.world_x + math.cos(self.angle) * self.size
         front_bullet_y = self.world_y + math.sin(self.angle) * self.size
         self.create_bullet(front_bullet_x, front_bullet_y, self.angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
-        # Shoot back cannon
         back_angle = self.angle + math.pi
         back_bullet_x = self.world_x + math.cos(back_angle) * self.size
         back_bullet_y = self.world_y + math.sin(back_angle) * self.size
@@ -348,7 +486,7 @@ class Enemy:
 
     def shoot_machine_gun(self):
         recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        spread = math.pi / 16  # Bullet spread for machine gun
+        spread = math.pi / 16
         for _ in range(self.fire_rate):
             angle = self.angle + random.uniform(-spread, spread)
             bullet_x = self.world_x + math.cos(angle) * self.size
@@ -357,198 +495,67 @@ class Enemy:
         self.barrel_recoil[0] = self.max_barrel_recoil
 
     def shoot_sniper(self):
-        # Shoot front cannon
         front_bullet_x = self.world_x + math.cos(self.angle) * self.size
         front_bullet_y = self.world_y + math.sin(self.angle) * self.size
         self.create_bullet(front_bullet_x, front_bullet_y, self.angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
-    def create_bullet(self, x, y, angle):
-        bullet_speed = 8
-        if self.tank_type == "sniper":
-            bullet_speed = 12
-        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1)
-        self.bullets.append(bullet)
-
-    def update(self, tank, shapes):
-        if not self.alive:
-            return
-
-        # Define the boundary around the player
-        boundary_width = SCREEN_WIDTH * 1.5
-        boundary_height = SCREEN_HEIGHT * 1.5
-        in_boundary = (abs(self.world_x - tank.world_x) < boundary_width / 2 and
-                       abs(self.world_y - tank.world_y) < boundary_height / 2)
-
-        if in_boundary:
-            self.target_player(tank)
-        else:
-            self.target_nearest_shape(shapes)
-
-        # Move towards the target
-        if self.target:
-            angle_to_target = math.atan2(self.target[1] - self.world_y, self.target[0] - self.world_x)
-            self.world_x += math.cos(angle_to_target) * self.speed
-            self.world_y += math.sin(angle_to_target) * self.speed
-            self.angle = angle_to_target
-
-        # Shoot at the target
-        if self.shoot_cooldown <= 0 and self.target:
-            self.shoot()
-            if self.tank_type == "basic":
-                self.shoot_cooldown = 25
-            elif self.tank_type == "twin":
-                if self.twin_fire_mode == "simultaneous":
-                    self.shoot_cooldown = 20
-                else:
-                    self.shoot_cooldown = 10
-            elif self.tank_type == "flank":
-                self.shoot_cooldown = 25
-            elif self.tank_type == "machine_gun":
-                self.shoot_cooldown = 10  # Faster shooting for machine gun
-            elif self.tank_type == "sniper":
-                self.shoot_cooldown = 30
-
-        if self.shoot_cooldown > 0:
-            self.shoot_cooldown -= 1
-
-        # Update bullets
-        for bullet in self.bullets[:]:
-            bullet.update()
-            if bullet.off_screen():
-                self.bullets.remove(bullet)
-
-        # Update barrel recoil
-        for i in range(len(self.barrel_recoil)):
-            if self.barrel_recoil[i] > 0:
-                self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
-
-        self.check_collision_with_shapes(shapes, tank)
-
-    def target_player(self, tank):
-        self.target = (tank.world_x, tank.world_y)
-
-    def target_nearest_shape(self, shapes):
-        nearest_shape = None
-        min_distance = float('inf')
-        for shape in shapes:
-            if shape.alive:
-                distance = math.sqrt((self.world_x - shape.world_x)**2 + (self.world_y - shape.world_y)**2)
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest_shape = shape
-        if nearest_shape:
-            self.target = (nearest_shape.world_x, nearest_shape.world_y)
-        else:
-            self.target = None
-
     def take_damage(self, damage, tank):
-        self.health -= damage
+        super().take_damage(damage)
         if self.health <= 0:
-            self.health = 0
-            self.alive = False
-            if tank is not None and isinstance(tank, Player):  # Check if tank is the player
-                tank.add_score(4*self.score//5)  # Give the enemy's score to the player
-                self.regenerate(tank)  # Regenerate the enemy
+            if isinstance(tank, Player):
+                tank.add_score(4 * self.score // 5)
+            self.regenerate(tank)
         return self.alive
 
     def regenerate(self, tank):
-        # Keep trying to find a suitable spawn location
         while True:
             self.world_x = random.randint(50, WORLD_WIDTH - 50)
             self.world_y = random.randint(50, WORLD_HEIGHT - 50)
-
-            # Calculate distance from the tank
             distance = math.sqrt((self.world_x - tank.world_x) ** 2 + (self.world_y - tank.world_y) ** 2)
-
-            # If the enemy is far enough from the tank, break the loop
-            if distance > 1000:  # Adjust this value as needed
+            if distance > 1000:
                 break
-
         self.health = self.max_health
         self.alive = True
-        self.score = 500  # Reset the enemy's score
+        self.score = 500
 
     def check_collision_with_enemies(self, enemies):
         for enemy in enemies:
-            distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
-            if distance < self.size + enemy.size:
-                angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
-                push_distance = (self.size + enemy.size) - distance
-                self.world_x += math.cos(angle) * push_distance / 2
-                self.world_y += math.sin(angle) * push_distance / 2
-                enemy.world_x -= math.cos(angle) * push_distance / 2
-                enemy.world_y -= math.sin(angle) * push_distance / 2
+            if enemy != self:
+                distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
+                if distance < self.size + enemy.size:
+                    angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
+                    push_distance = (self.size + enemy.size) - distance
+                    self.world_x += math.cos(angle) * push_distance / 2
+                    self.world_y += math.sin(angle) * push_distance / 2
+                    enemy.world_x -= math.cos(angle) * push_distance / 2
+                    enemy.world_y -= math.sin(angle) * push_distance / 2
 
-    def check_collision_with_shapes(self, shapes, tank):
-        for shape in shapes:
-            if shape.alive:
-                if shape.shape_type == "pentagon":
-                    for angle in range(0, 360, 30):
-                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
-                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
-                        if shape.point_inside_polygon(point_x, point_y):
-                            self.take_damage(5, tank)  # Pass None instead of shape
-                            shape.take_damage(5)
-                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                            self.world_x += math.cos(angle) * 5
-                            self.world_y += math.sin(angle) * 5
-                            break
-                else:
-                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-                    if distance < self.size + shape.size // 2:
-                        self.take_damage(5, tank)  # Pass None instead of shape
-                        shape.take_damage(5)
-                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                        push_distance = (self.size + shape.size // 2) - distance
-                        self.world_x += math.cos(angle) * push_distance / 2
-                        self.world_y += math.sin(angle) * push_distance / 2
-                        shape.world_x -= math.cos(angle) * push_distance / 2
-                        shape.world_y -= math.sin(angle) * push_distance / 2
-
-
-class Player:
+# Subclass for Player
+class Player(Tank):
     def __init__(self):
+        super().__init__(WORLD_WIDTH // 2, WORLD_HEIGHT // 2, size=40, speed=5, color=AQUA)
         self.x = SCREEN_WIDTH // 2
         self.y = SCREEN_HEIGHT // 2
-        self.size = 40
-        self.speed = 5
-        self.angle = 0
-        self.color = AQUA
-        self.world_x = WORLD_WIDTH // 2
-        self.world_y = WORLD_HEIGHT // 2
-        self.bullets = []
-        self.autofire = False
         self.autofire = False
         self.autospin = False
-        self.shoot_cooldown = 0
-        self.cannon_length = 75
-        self.cannon_thickness = 30
         self.recoil_velocity_x = 0
         self.recoil_velocity_y = 0
         self.recoil_dampening = 0.45
         self.max_recoil_speed = 2
-        self.health = 500
-        self.max_health = 500
         self.regen_rate = 0.1
         self.regen_cooldown = 0
         self.regen_cooldown_max = 180
-        # New attributes for barrel recoil
-        self.barrel_recoil = [0]  # Initialize as a list with one element
-        self.max_barrel_recoil = 10
-        self.barrel_recoil_speed = 1
         self.level = 1
         self.score = 0
-        self.tank_type = "basic"
         self.upgrade_available = False
-
 
     def upgrade_to_twin(self):
         self.tank_type = "twin"
         self.cannon_separation = self.size * 1.0
         self.cannon_length = 80
         self.next_cannon = 1
-        self.barrel_recoil = [0, 0]  # Two barrels for twin
+        self.barrel_recoil = [0, 0]
         self.twin_fire_mode = "alternate"
         self.upgrade_available = False
 
@@ -556,7 +563,7 @@ class Player:
         self.tank_type = "machine_gun"
         self.cannon_length = 70
         self.cannon_thickness = 50
-        self.barrel_recoil = [0]  # Single barrel for machine gun
+        self.barrel_recoil = [0]
         self.fire_rate = 5
         self.upgrade_available = False
 
@@ -564,196 +571,37 @@ class Player:
         self.tank_type = "flank"
         self.front_cannon_length = 75
         self.back_cannon_length = 60
-        self.barrel_recoil = [0, 0]  # Two barrels for flank guard
+        self.barrel_recoil = [0, 0]
         self.upgrade_available = False
 
     def upgrade_to_sniper(self):
         self.tank_type = "sniper"
         self.cannon_length = 90
-        self.barrel_recoil = [0]  # Single barrel for sniper
-        self.fire_rate = 1  # Slower fire rate
+        self.barrel_recoil = [0]
+        self.fire_rate = 1
         self.upgrade_available = False
 
     def update_level(self):
         previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
-        # Remove the upgrade_available flag, as we'll check the level directly
 
     def level_up(self):
         if self.level < 45:
             self.level += 1
             self.score = scores[self.level - 1]
-            # Here you might want to add any other effects of leveling up
-            # For example, increasing health, damage, etc.
 
     def get_progress_to_next_level(self):
         if self.level >= len(levels):
-            return 1.0  # Max level reached
+            return 1.0
         if self.level == len(levels) - 1:
-            # For the last level (44 to 45), calculate progress normally
             current_level_score = scores[self.level - 1]
             next_level_score = scores[self.level]
         else:
-            # For all other levels
             current_level_score = scores[self.level - 1]
             next_level_score = scores[self.level]
 
         progress = (self.score - current_level_score) / (next_level_score - current_level_score)
-        return min(max(progress, 0), 1)  # Ensure progress is between 0 and 1
-
-    def draw(self):
-
-        if self.tank_type == "basic":
-            self.cannon_thickness = 35
-            self.draw_basic_cannon()
-        elif self.tank_type == "twin":
-            self.draw_twin_cannons()
-        elif self.tank_type == "flank":
-            self.draw_flank_cannons()
-        elif self.tank_type == "machine_gun":
-            self.draw_machine_gun_cannon()
-        elif self.tank_type == "sniper":
-            self.draw_sniper_cannon()
-
-        # Draw tank outline
-        pygame.draw.circle(screen, TANKOUTLINE, (int(self.x), int(self.y)), self.size + 4)
-
-        # Draw tank body
-        pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
-
-        # Draw health bar only if health is below max
-        if self.health < self.max_health:
-            health_bar_width = self.size * 2
-            health_bar_height = 5
-            health_percentage = self.health / self.max_health
-            health_bar_color = HEALTHBARGREEN
-            pygame.draw.rect(screen, health_bar_color, (
-                int(self.x - health_bar_width // 2),
-                int(self.y + self.size + 5),  # Move below the tank
-                int(health_bar_width * health_percentage),
-                health_bar_height
-            ))
-            pygame.draw.rect(screen, HEALTHBAROUTLINE, (
-                int(self.x - health_bar_width // 2),
-                int(self.y + self.size + 5),  # Move below the tank
-                health_bar_width,
-                health_bar_height
-            ), 1)
-
-    def draw_basic_cannon(self):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(self.x, self.y, cannon_end_x, cannon_end_y)
-
-    def draw_twin_cannons(self):
-        for i in [-1, 1]:
-            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
-            cannon_start_x = self.x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_y = self.y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_x -= math.cos(self.angle) * self.size * 0.1
-            cannon_start_y -= math.sin(self.angle) * self.size * 0.1
-            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
-            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
-            self.draw_cannon(cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y)
-
-    def draw_flank_cannons(self):
-        # Draw front cannon
-        recoil_adjusted_length = self.front_cannon_length - self.barrel_recoil[0]
-        front_cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
-        front_cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(self.x, self.y, front_cannon_end_x, front_cannon_end_y)
-
-        # Draw back cannon
-        back_angle = self.angle + math.pi
-        recoil_adjusted_length = self.back_cannon_length - self.barrel_recoil[1]
-        back_cannon_end_x = self.x + math.cos(back_angle) * recoil_adjusted_length
-        back_cannon_end_y = self.y + math.sin(back_angle) * recoil_adjusted_length
-        self.draw_cannon(self.x, self.y, back_cannon_end_x, back_cannon_end_y)
-
-    def draw_machine_gun_cannon(self):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
-
-        # Calculate the funnel shape
-        base_width = self.cannon_thickness * 0.75
-        tip_width = self.cannon_thickness * 1  # Increased tip width for more pronounced funnel shape
-
-        # Calculate the four corners of the funnel
-        perpendicular_angle = self.angle + math.pi / 2
-        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
-        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
-        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
-        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
-
-        cannon_corners = [
-            (self.x + base_offset_x, self.y + base_offset_y),
-            (self.x - base_offset_x, self.y - base_offset_y),
-            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
-            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        ]
-
-        # Draw the main cannon body
-        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
-
-        # Draw outline
-        outline_thickness = 3
-        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
-
-        # Draw the flat end of the barrel
-        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
-        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
-
-    def draw_sniper_cannon(self):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = self.x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = self.y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(self.x, self.y, cannon_end_x, cannon_end_y)
-
-    def draw_cannon(self, start_x, start_y, end_x, end_y):
-        perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
-        half_thickness = self.cannon_thickness / 2
-        outline_thickness = 3  # Adjust this value to change the outline thickness
-
-        # Calculate corners for the outline
-        outline_offset_x = math.cos(perpendicular_angle) * (half_thickness + outline_thickness)
-        outline_offset_y = math.sin(perpendicular_angle) * (half_thickness + outline_thickness)
-        outline_corners = [
-            (start_x + outline_offset_x, start_y + outline_offset_y),
-            (start_x - outline_offset_x, start_y - outline_offset_y),
-            (end_x - outline_offset_x, end_y - outline_offset_y),
-            (end_x + outline_offset_x, end_y + outline_offset_y)
-        ]
-
-        # Draw the outline
-        pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_corners)
-
-        # Calculate corners for the main cannon body
-        corner_offset_x = math.cos(perpendicular_angle) * half_thickness
-        corner_offset_y = math.sin(perpendicular_angle) * half_thickness
-        cannon_corners = [
-            (start_x + corner_offset_x, start_y + corner_offset_y),
-            (start_x - corner_offset_x, start_y - corner_offset_y),
-            (end_x - corner_offset_x, end_y - corner_offset_y),
-            (end_x + corner_offset_x, end_y + corner_offset_y)
-        ]
-
-        # Draw the main cannon body
-        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
-
-        # Draw the flat end of the barrel
-        end_line_start = (end_x - outline_offset_x, end_y - outline_offset_y)
-        end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
-        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
-
-    def create_bullet(self, x, y, angle):
-        bullet_speed = 10
-        if self.tank_type == "sniper":
-            bullet_speed = 15
-        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 0)
-        self.bullets.append(bullet)
+        return min(max(progress, 0), 1)
 
     def update(self, keys_pressed):
         move_x, move_y = 0, 0
@@ -762,42 +610,33 @@ class Player:
         if keys_pressed[pygame.K_a]: move_x = -1
         if keys_pressed[pygame.K_d]: move_x = 1
 
-        # Normalize movement and apply recoil
         if move_x != 0 or move_y != 0:
             magnitude = math.sqrt(move_x ** 2 + move_y ** 2)
             move_x, move_y = move_x / magnitude, move_y / magnitude
         move_x += self.recoil_velocity_x
         move_y += self.recoil_velocity_y
 
-        # Update world coordinates and clamp to world bounds
         self.world_x = max(self.size, min(WORLD_WIDTH - self.size, self.world_x + move_x * self.speed))
         self.world_y = max(self.size, min(WORLD_HEIGHT - self.size, self.world_y + move_y * self.speed))
 
-        # Apply dampening to recoil
         self.recoil_velocity_x *= self.recoil_dampening
         self.recoil_velocity_y *= self.recoil_dampening
 
-        # Ensure recoil doesn't exceed maximum speed
         recoil_speed = math.sqrt(self.recoil_velocity_x ** 2 + self.recoil_velocity_y ** 2)
         if recoil_speed > self.max_recoil_speed:
             factor = self.max_recoil_speed / recoil_speed
             self.recoil_velocity_x *= factor
             self.recoil_velocity_y *= factor
 
-            # Handle health regeneration
         if self.health < self.max_health:
             if self.regen_cooldown > 0:
                 self.regen_cooldown -= 1
             else:
                 self.health = min(self.max_health, self.health + self.regen_rate)
 
-                # Update barrel recoil
         for i in range(len(self.barrel_recoil)):
             if self.barrel_recoil[i] > 0:
                 self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
-
-                # Update player size based on level
-#        self.size = int(50 * (1.01 ** (self.level - 1)))
 
     def rotate_to_mouse(self, mouse_pos):
         if self.autospin:
@@ -822,9 +661,8 @@ class Player:
                 self.shoot_cooldown = 7.5
             elif self.tank_type == "sniper":
                 self.shoot_sniper()
-                self.shoot_cooldown = 30  # Longer cooldown for sniper
+                self.shoot_cooldown = 30
 
-            # Apply recoil
             recoil_force = 0.2
             self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
             self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
@@ -850,7 +688,7 @@ class Player:
             self.angle) * self.size * 0.9
         self.create_bullet(bullet_x, bullet_y, self.angle)
         self.barrel_recoil[(i + 1) // 2] = self.max_barrel_recoil
-        self.next_cannon = 3 - self.next_cannon  # Switch between 1 and 2
+        self.next_cannon = 3 - self.next_cannon
 
     def shoot_twin_simultaneous(self):
         for i in [-1, 1]:
@@ -863,13 +701,11 @@ class Player:
             self.barrel_recoil[(i + 1) // 2] = self.max_barrel_recoil
 
     def shoot_flank(self):
-        # Shoot front cannon
         front_bullet_x = self.world_x + math.cos(self.angle) * self.size
         front_bullet_y = self.world_y + math.sin(self.angle) * self.size
         self.create_bullet(front_bullet_x, front_bullet_y, self.angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
-        # Shoot back cannon
         back_angle = self.angle + math.pi
         back_bullet_x = self.world_x + math.cos(back_angle) * self.size
         back_bullet_y = self.world_y + math.sin(back_angle) * self.size
@@ -878,7 +714,7 @@ class Player:
 
     def shoot_machine_gun(self):
         recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        spread = math.pi / 16  # Bullet spread for machine gun
+        spread = math.pi / 16
         for _ in range(self.fire_rate):
             angle = self.angle + random.uniform(-spread, spread)
             bullet_x = self.world_x + math.cos(angle) * self.size
@@ -889,7 +725,7 @@ class Player:
     def shoot_sniper(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
         bullet_y = self.world_y + math.sin(self.angle) * self.size
-        bullet = self.create_bullet(bullet_x, bullet_y, self.angle)
+        self.create_bullet(bullet_x, bullet_y, self.angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
 
     def handle_autofire(self):
@@ -899,7 +735,7 @@ class Player:
             self.shoot_cooldown -= 1
 
     def take_damage(self, damage, attacker=None):
-        self.health -= damage
+        super().take_damage(damage)
         if self.health <= 0:
             self.health = 0
             self.tank_type = "basic"
@@ -916,7 +752,7 @@ class Player:
             distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
             if distance < self.size + enemy.size:
                 self.take_damage(5, "Enemy")
-                enemy.take_damage(5, self)  # Pass 'self' (the tank) here
+                enemy.take_damage(5, self)
                 angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
                 push_distance = (self.size + enemy.size) - distance
                 self.world_x += math.cos(angle) * push_distance / 2
@@ -932,32 +768,6 @@ class Player:
         self.recoil_velocity_y = 0
         self.shoot_cooldown = 0
         self.regen_cooldown = 0
-
-    def check_collision_with_shapes(self, shapes):
-        for shape in shapes:
-            if shape.alive:
-                if shape.shape_type == "pentagon":
-                    for angle in range(0, 360, 30):
-                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
-                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
-                        if shape.point_inside_polygon(point_x, point_y):
-                            self.take_damage(5, shape)
-                            shape.take_damage(5)
-                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                            self.world_x += math.cos(angle) * 5
-                            self.world_y += math.sin(angle) * 5
-                            break
-                else:
-                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-                    if distance < self.size + shape.size // 2:
-                        self.take_damage(5, shape)
-                        shape.take_damage(5)
-                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                        push_distance = (self.size + shape.size // 2) - distance
-                        self.world_x += math.cos(angle) * push_distance / 2
-                        self.world_y += math.sin(angle) * push_distance / 2
-                        shape.world_x -= math.cos(angle) * push_distance / 2
-                        shape.world_y -= math.sin(angle) * push_distance / 2
 
     def add_score(self, points):
         self.score += points
@@ -985,20 +795,15 @@ class Bullet:
         self.world_y += self.vel_y
         self.lifespan -= 1
 
-        # Keep bullets within world bounds
         self.world_x = max(self.radius, min(WORLD_WIDTH - self.radius, self.world_x))
         self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
 
     def draw(self, tank):
-        # Calculate the bullet's position relative to the tank's screen position
         screen_x = int(self.world_x - tank.world_x + tank.x)
         screen_y = int(self.world_y - tank.world_y + tank.y)
 
-        # Only draw the bullet if it's within the screen bounds
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
-            # Draw bullet outline
             pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y), self.radius + 4)
-
             pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.radius)
 
     def off_screen(self):
@@ -1037,7 +842,7 @@ class Bullet:
 
     def check_collision_with_bullets(self, other_bullets):
         for other_bullet in other_bullets:
-            if self.tankNum != other_bullet.tankNum:  # Only check collision between different types of bullets
+            if self.tankNum != other_bullet.tankNum:
                 distance = math.sqrt((self.world_x - other_bullet.world_x) ** 2 + (self.world_y - other_bullet.world_y) ** 2)
                 if distance < self.radius + other_bullet.radius:
                     return other_bullet
@@ -1172,11 +977,11 @@ class Shape:
         self.health -= damage
         if self.health <= 0:
             if self.shape_type == "square":
-                self.tank.score += 10
+                self.tank.add_score(10)
             elif self.shape_type == "triangle":
-                self.tank.score += 25
+                self.tank.add_score(25)
             elif self.shape_type == "pentagon":
-                self.tank.score += 130
+                self.tank.add_score(130)
             self.regenerate()
 
     def regenerate(self):
@@ -1503,25 +1308,23 @@ def draw_level_info(screen, tank):
 def game_loop():
     global game_over, killer_object
 
-
-    # Show menu and get player choice
     include_enemies = draw_menu(screen, clock)
-    if include_enemies is None:  # Player closed the window
+    if include_enemies is None:
         return
 
     player = Player()
     shapes = initialize_shapes(player)
     enemies = initialize_enemies() if include_enemies else []
     running = True
-    minimap_mode = 0  # Start with all elements visible
+    minimap_mode = 0
     game_over = False
     start_time = time.time()
     killer_object = ""
     collision_effects = []
     level_up_cooldown = 0
-    level_up_cooldown_max = 15  # Initial cooldown
-    level_up_cooldown_min = 3  # Minimum cooldown when holding the key
-    level_up_hold_time = 0  # Track how long the key has been held
+    level_up_cooldown_max = 15
+    level_up_cooldown_min = 3
+    level_up_hold_time = 0
 
     while running:
         screen.fill(SCREENGREY)
@@ -1532,9 +1335,9 @@ def game_loop():
             elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
                 if player.shoot_cooldown <= 0:
                     player.shoot()
-                if event.button == 1:  # Left mouse button
+                if event.button == 1:
                     if handle_upgrade_click(player, event.pos):
-                        continue  # Skip the rest of the loop if an upgrade was selected
+                        continue
                     if player.shoot_cooldown <= 0:
                         player.shoot()
             elif event.type == pygame.KEYDOWN:
@@ -1546,7 +1349,7 @@ def game_loop():
                     player.take_damage(player.health, "Self-Destruct")
                 if event.key == pygame.K_TAB:
                     minimap_mode = (minimap_mode + 1) % 5
-        # Add the new key handling logic here
+
         keys = pygame.key.get_pressed()
         if keys[pygame.K_k]:
             if level_up_cooldown == 0:
@@ -1554,9 +1357,9 @@ def game_loop():
                 level_up_cooldown = max(level_up_cooldown_min,
                                         level_up_cooldown_max - level_up_hold_time // 2)
                 level_up_hold_time += 1
-            level_up_hold_time = min(level_up_hold_time + 1, 30)  # Cap the hold time
+            level_up_hold_time = min(level_up_hold_time + 1, 30)
         else:
-            level_up_hold_time = 0  # Reset hold time when key is released
+            level_up_hold_time = 0
 
         if level_up_cooldown > 0:
             level_up_cooldown -= 1
@@ -1574,13 +1377,14 @@ def game_loop():
                 for enemy in enemies[:]:
                     if enemy.alive:
                         enemy.update(player, shapes)
-                    else:
-                        enemies.remove(enemy)
 
                 player.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
 
             player.check_collision_with_shapes(shapes)
+            if include_enemies:
+                player.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
             player.update_level()
+
             # Handle player bullets
             for bullet in player.bullets[:]:
                 bullet.update()
@@ -1600,8 +1404,7 @@ def game_loop():
                             if enemy_bullet in enemy.bullets:
                                 enemy.bullets.remove(enemy_bullet)
                                 break
-                    elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive],
-                                                             player):  # Pass tank here
+                    elif bullet.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive], player):
                         collision_effects.append(bullet.create_collision_effect())
                         player.bullets.remove(bullet)
 
@@ -1631,7 +1434,6 @@ def game_loop():
 
         # Drawing
         draw_grid(player)
-        #draw_world_border(tank)
         draw_score(screen, player.score)
         draw_level_info(screen, player)
 
@@ -1651,11 +1453,10 @@ def game_loop():
             if effect.is_finished():
                 collision_effects.remove(effect)
 
-        player.draw()
+        player.draw(screen)
         for bullet in player.bullets:
             bullet.draw(player)
 
-        # Draw upgrade buttons after drawing the tank
         draw_upgrade_buttons(screen, player)
 
         if minimap_mode > 0:
@@ -1672,8 +1473,9 @@ def game_loop():
             survival_time = time.time() - start_time
             death_screen(screen, clock, killer_object, survival_time, player.score)
             game_over = False
-            player.respawn()
-            player.score = 0  # Reset score on respawn
+            halfscore = scores[player.level//2]
+            player = Player()
+            player.score=halfscore
             start_time = time.time()
 
     pygame.quit()
