@@ -116,6 +116,13 @@ class Tank:
         self.barrel_recoil_speed = 1
         self.score = 500
         self.tank_type = "basic"
+        self.recoil_velocity_x = 0
+        self.recoil_velocity_y = 0
+        self.recoil_dampening = 0.45
+        self.max_recoil_speed = 2
+        self.regen_rate = 0.1
+        self.regen_cooldown = 0
+        self.regen_cooldown_max = 180
 
     def draw(self, screen):
         if not self.alive:
@@ -304,6 +311,7 @@ class Enemy(Tank):
         super().__init__(x, y, size=40, speed=3, color=RED)
         self.target = None
         self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
+        self.score = 500
         if self.tank_type == "twin":
             self.cannon_separation = self.size * 1.0
             self.cannon_length = 80
@@ -1369,12 +1377,12 @@ def game_loop():
                 for enemy in enemies[:]:
                     if enemy.alive:
                         enemy.update(player, shapes)
-                    else:
-                        enemies.remove(enemy)
 
                 player.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
 
             player.check_collision_with_shapes(shapes)
+            if include_enemies:
+                player.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
             player.update_level()
 
             # Handle player bullets
