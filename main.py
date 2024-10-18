@@ -505,7 +505,7 @@ class Enemy(Tank):
         if self.health <= 0:
             if isinstance(tank, Player):
                 tank.add_score(4 * self.score // 5)
-                self.regenerate(tank)
+            self.regenerate(tank)
         return self.alive
 
     def regenerate(self, tank):
@@ -1468,6 +1468,8 @@ def game_loop():
 
         pygame.display.flip()
         clock.tick(60)
+        for enemy in enemies:
+            print(enemy.alive)
 
         if game_over:
             survival_time = time.time() - start_time
