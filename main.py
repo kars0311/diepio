@@ -281,11 +281,15 @@ class Tank:
 
 # Subclass for Enemy
 class Enemy(Tank):
+    enemy_count = 0  # Class variable to keep track of total enemies created
     def __init__(self, x, y):
         super().__init__(x, y, size=40, speed=3, color=RED)
+        self.enemy_index = Enemy.enemy_count
+        Enemy.enemy_count += 1
         self.target = None
         self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
-        self.score = 500
+        self.individual_score = 500  # Individual score for each enemy
+
         if self.tank_type == "twin":
             self.cannon_separation = self.size * 1.0
             self.cannon_length = 80
@@ -306,6 +310,9 @@ class Enemy(Tank):
             self.cannon_thickness = 30
             self.barrel_recoil = [0]
             self.fire_rate = 2
+
+    def add_score(self, points):
+        self.individual_score += points
 
     def draw(self, tank):
         if not self.alive:
@@ -478,8 +485,9 @@ class Enemy(Tank):
         super().take_damage(damage)
         if self.health <= 0:
             if isinstance(tank, Player):
-                if self.score<23536:
-                    tank.add_score(self.score)
+                # Give score based on this enemy's individual score
+                if self.individual_score < 23536:
+                    tank.add_score(self.individual_score)
                 else:
                     tank.add_score(23536)
             self.regenerate(tank)
@@ -494,7 +502,7 @@ class Enemy(Tank):
                 break
         self.health = self.max_health
         self.alive = True
-        self.score = 500
+        self.individual_score = 500  # Reset individual score upon regeneration
 
     def check_collision_with_enemies(self, enemies):
         for enemy in enemies:
@@ -526,7 +534,7 @@ class Enemy(Tank):
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
                         self.take_damage(5, shape)
-                        shape.take_damage(5, tankNum)
+                        shape.take_damage(5, self)  # Pass the enemy instance instead of tankNum
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
                         self.world_x += math.cos(angle) * push_distance / 2
@@ -908,6 +916,7 @@ class BulletCollisionEffect:
         return self.alpha <= 0
 
 def initialize_enemies():
+    Enemy.enemy_count = 0  # Reset the enemy count before creating new enemies
     enemies = []
     for _ in range(5):
         x = random.randint(100, WORLD_WIDTH - 100)
@@ -924,8 +933,8 @@ class Shape:
         self.rotation_speed = random.uniform(0.01, 0.03)
         self.rotation_direction = random.choice([-1, 1])
         self.points = []
-        self.outline_thickness = outline_thickness  # New attribute for outline thickness
-        self.tank = tank  # Store the tank object
+        self.outline_thickness = outline_thickness
+        self.tank = tank
 
         if shape_type == "square":
             self.size, self.health, self.max_health, self.color, self.outline_color = 40, 100, 100, SQUAREYELLOW, SQUAREOUTLINE
@@ -937,12 +946,42 @@ class Shape:
         self.alive = True
         self.update_points()
 
-        # New attributes for perpetual circular movement
+        # Attributes for circular movement
         self.orbit_radius = random.randint(25, 50)
         self.orbit_speed = random.uniform(0.005, 0.02)
         self.orbit_angle = random.uniform(0, 2 * math.pi)
         self.center_x = x
         self.center_y = y
+
+    def take_damage(self, damage, attacker):
+        self.health -= damage
+        if self.health <= 0:
+            if isinstance(attacker, Player):
+                # Player destroyed the shape
+                if self.shape_type == "square":
+                    attacker.add_score(10)
+                elif self.shape_type == "triangle":
+                    attacker.add_score(25)
+                elif self.shape_type == "pentagon":
+                    attacker.add_score(130)
+            elif isinstance(attacker, Enemy):
+                # Enemy destroyed the shape
+                if self.shape_type == "square":
+                    attacker.add_score(10)
+                elif self.shape_type == "triangle":
+                    attacker.add_score(25)
+                elif self.shape_type == "pentagon":
+                    attacker.add_score(130)
+            self.regenerate()
+
+    def regenerate(self):
+        self.world_x = random.randint(100, WORLD_WIDTH - 100)
+        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+        self.center_x = self.world_x
+        self.center_y = self.world_y
+        self.health = self.max_health
+        self.alive = True
+        self.orbit_angle = random.uniform(0, 2 * math.pi)
 
     def update(self, shapes):
         if not self.alive:
@@ -1001,27 +1040,6 @@ class Shape:
         self.center_y = self.world_y - math.sin(self.orbit_angle) * self.orbit_radius
         other.center_x = other.world_x - math.cos(other.orbit_angle) * other.orbit_radius
         other.center_y = other.world_y - math.sin(other.orbit_angle) * other.orbit_radius
-
-    def take_damage(self, damage, tankNum):
-        self.health -= damage
-        if self.health <= 0:
-            if tankNum == 0:
-                if self.shape_type == "square":
-                    self.tank.add_score(10)
-                elif self.shape_type == "triangle":
-                    self.tank.add_score(25)
-                elif self.shape_type == "pentagon":
-                    self.tank.add_score(130)
-            self.regenerate()
-
-    def regenerate(self):
-        self.world_x = random.randint(100, WORLD_WIDTH - 100)
-        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
-        self.center_x = self.world_x
-        self.center_y = self.world_y
-        self.health = self.max_health
-        self.alive = True
-        self.orbit_angle = random.uniform(0, 2 * math.pi)
 
     def point_inside_polygon(self, x, y):
         if self.shape_type != "pentagon":
