@@ -478,7 +478,10 @@ class Enemy(Tank):
         super().take_damage(damage)
         if self.health <= 0:
             if isinstance(tank, Player):
-                tank.add_score(4 * self.score // 5)
+                if self.score<23536:
+                    tank.add_score(self.score)
+                else:
+                    tank.add_score(23536)
             self.regenerate(tank)
         return self.alive
 
