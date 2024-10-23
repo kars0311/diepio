@@ -270,6 +270,7 @@ class Tank:
         if self.tank_type == "sniper":
             bullet_speed = 12
         bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1 if isinstance(self, Enemy) else 0)
+        bullet.owner = self  # Set the owner reference
         self.bullets.append(bullet)
 
     def take_damage(self, damage, attacker=None):
@@ -826,6 +827,21 @@ class Bullet:
         if tankNum == 1:
             self.color = RED
             self.bulletOutline = ENEMYOUTLINE
+        self.owner = None  # Store reference to the tank that fired this bullet
+
+    def check_collision(self, shapes, attacker):
+        for shape in shapes:
+            if shape.alive:
+                if shape.shape_type == "pentagon":
+                    if shape.point_inside_polygon(self.world_x, self.world_y):
+                        shape.take_damage(self.damage, attacker)
+                        return True
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.radius + shape.size // 2:
+                        shape.take_damage(self.damage, attacker)
+                        return True
+        return False
 
     def update(self):
         self.world_x += self.vel_x
@@ -847,20 +863,6 @@ class Bullet:
         return (self.world_x < self.radius or self.world_x > WORLD_WIDTH - self.radius or
                 self.world_y < self.radius or self.world_y > WORLD_HEIGHT - self.radius or
                 self.lifespan <= 0)
-
-    def check_collision(self, shapes, tankNum):
-        for shape in shapes:
-            if shape.alive:
-                if shape.shape_type == "pentagon":
-                    if shape.point_inside_polygon(self.world_x, self.world_y):
-                        shape.take_damage(self.damage, tankNum)
-                        return True
-                else:
-                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-                    if distance < self.radius + shape.size // 2:
-                        shape.take_damage(self.damage, tankNum)
-                        return True
-        return False
 
     def check_collision_with_enemies(self, enemies, tank):
         for enemy in enemies:
@@ -1441,7 +1443,7 @@ def game_loop():
                 if bullet.off_screen():
                     collision_effects.append(bullet.create_collision_effect())
                     player.bullets.remove(bullet)
-                elif bullet.check_collision(shapes, player):
+                elif bullet.check_collision(shapes, player):  # Pass player instance
                     collision_effects.append(bullet.create_collision_effect())
                     player.bullets.remove(bullet)
                 elif include_enemies:
@@ -1462,10 +1464,12 @@ def game_loop():
             if include_enemies:
                 for enemy in enemies:
                     if enemy.alive:
-                        enemy.check_collision_with_enemies(enemies)
                         for bullet in enemy.bullets[:]:
                             bullet.update()
                             if bullet.off_screen():
+                                collision_effects.append(bullet.create_collision_effect())
+                                enemy.bullets.remove(bullet)
+                            elif bullet.check_collision(shapes, enemy):  # Pass enemy instance
                                 collision_effects.append(bullet.create_collision_effect())
                                 enemy.bullets.remove(bullet)
                             else:
@@ -1475,9 +1479,6 @@ def game_loop():
                                     collision_effects.append(player_bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
                                     player.bullets.remove(player_bullet)
-                                elif bullet.check_collision(shapes, player):
-                                    collision_effects.append(bullet.create_collision_effect())
-                                    enemy.bullets.remove(bullet)
                                 elif bullet.check_collision_with_tank(player):
                                     collision_effects.append(bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
