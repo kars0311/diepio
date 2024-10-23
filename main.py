@@ -1355,6 +1355,81 @@ def draw_level_info(screen, tank):
     progress_rect.midleft = (bar_x + bar_width + 10, bar_y + bar_height // 2)
     screen.blit(progress_text, progress_rect)
 
+
+def draw_leaderboard(screen, player, enemies):
+    # Constants for leaderboard
+    LEADERBOARD_WIDTH = 200
+    LEADERBOARD_HEIGHT = 300
+    ENTRY_HEIGHT = 30
+    PADDING = 10
+
+    # Position leaderboard in top right corner
+    leaderboard_x = SCREEN_WIDTH - LEADERBOARD_WIDTH - 10
+    leaderboard_y = 40  # Leave space for score display at very top
+
+    # Create list of all tanks and their scores
+    scores_list = []
+    # Add player with special marking
+    scores_list.append({
+        'name': 'You',
+        'score': player.score,
+        'color': player.color,
+        'isPlayer': True
+    })
+
+    # Add enemies
+    for i, enemy in enumerate(enemies):
+        if enemy.alive:
+            scores_list.append({
+                'name': f'Enemy {enemy.enemy_index + 1}',
+                'score': enemy.individual_score,
+                'color': enemy.color,
+                'isPlayer': False
+            })
+
+    # Sort by score in descending order
+    scores_list.sort(key=lambda x: x['score'], reverse=True)
+
+    # Draw background
+    background_surface = pygame.Surface((LEADERBOARD_WIDTH, LEADERBOARD_HEIGHT), pygame.SRCALPHA)
+    background_surface.fill((255, 255, 255, 180))  # Semi-transparent white
+    screen.blit(background_surface, (leaderboard_x, leaderboard_y))
+
+    # Draw title
+    font_title = pygame.font.SysFont(None, 36)
+    title_text = font_title.render("Leaderboard", True, BLACK)
+    title_rect = title_text.get_rect(centerx=leaderboard_x + LEADERBOARD_WIDTH // 2, y=leaderboard_y + PADDING)
+    screen.blit(title_text, title_rect)
+
+    # Draw entries
+    font_entry = pygame.font.SysFont(None, 24)
+    for i, entry in enumerate(scores_list):
+        y_pos = leaderboard_y + title_rect.height + PADDING * 2 + (i * ENTRY_HEIGHT)
+
+        # Draw rank
+        rank_text = font_entry.render(f"#{i + 1}", True, BLACK)
+        screen.blit(rank_text, (leaderboard_x + PADDING, y_pos))
+
+        # Draw name with color indicator
+        name_color = entry['color']
+        pygame.draw.circle(screen, name_color,
+                           (leaderboard_x + PADDING * 4, y_pos + ENTRY_HEIGHT // 2), 6)
+
+        # Add outline to color indicator
+        pygame.draw.circle(screen, BLACK if entry['isPlayer'] else ENEMYOUTLINE,
+                           (leaderboard_x + PADDING * 4, y_pos + ENTRY_HEIGHT // 2), 6, 1)
+
+        name_text = font_entry.render(entry['name'], True, BLACK)
+        screen.blit(name_text, (leaderboard_x + PADDING * 6, y_pos))
+
+        # Draw score
+        score_text = font_entry.render(str(int(entry['score'])), True, BLACK)
+        score_rect = score_text.get_rect()
+        score_rect.right = leaderboard_x + LEADERBOARD_WIDTH - PADDING
+        score_rect.y = y_pos
+        screen.blit(score_text, score_rect)
+
+
 def game_loop():
     global game_over, killer_object
 
@@ -1504,11 +1579,16 @@ def game_loop():
             if effect.is_finished():
                 collision_effects.remove(effect)
 
+        # In the drawing section of the game loop, add:
         player.draw(screen)
         for bullet in player.bullets:
             bullet.draw(player)
 
         draw_upgrade_buttons(screen, player)
+
+        # Add leaderboard drawing here
+        if include_enemies:
+            draw_leaderboard(screen, player, enemies)
 
         if minimap_mode > 0:
             draw_minimap(player, shapes, enemies, minimap_mode)
