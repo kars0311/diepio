@@ -289,7 +289,8 @@ class Enemy(Tank):
         Enemy.enemy_count += 1
         self.target = None
         self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
-        self.individual_score = 500  # Individual score for each enemy
+        self.individual_score = 500  # Initial score
+        self.level = 1  # Add level tracking for enemies
 
         if self.tank_type == "twin":
             self.cannon_separation = self.size * 1.0
@@ -312,8 +313,29 @@ class Enemy(Tank):
             self.barrel_recoil = [0]
             self.fire_rate = 2
 
+    def update_level(self):
+        """Update enemy level based on score, just like player"""
+        self.level = np.searchsorted(scores, self.individual_score, side='right')
+
+    def regenerate(self, tank):
+        while True:
+            self.world_x = random.randint(50, WORLD_WIDTH - 50)
+            self.world_y = random.randint(50, WORLD_HEIGHT - 50)
+            distance = math.sqrt((self.world_x - tank.world_x) ** 2 + (self.world_y - tank.world_y) ** 2)
+            if distance > 1000:
+                break
+        self.health = self.max_health
+        self.alive = True
+
+        # Update level before resetting score
+        self.update_level()
+        # Reset score to half of current level's score, just like player
+        halfscore = scores[self.level // 2] if self.level > 1 else 500
+        self.individual_score = halfscore
+
     def add_score(self, points):
         self.individual_score += points
+        self.update_level()  # Update level when score changes
 
     def draw(self, tank):
         if not self.alive:
@@ -493,17 +515,6 @@ class Enemy(Tank):
                     tank.add_score(23536)
             self.regenerate(tank)
         return self.alive
-
-    def regenerate(self, tank):
-        while True:
-            self.world_x = random.randint(50, WORLD_WIDTH - 50)
-            self.world_y = random.randint(50, WORLD_HEIGHT - 50)
-            distance = math.sqrt((self.world_x - tank.world_x) ** 2 + (self.world_y - tank.world_y) ** 2)
-            if distance > 1000:
-                break
-        self.health = self.max_health
-        self.alive = True
-        self.individual_score = 500  # Reset individual score upon regeneration
 
     def check_collision_with_enemies(self, enemies):
         for enemy in enemies:
@@ -1356,33 +1367,76 @@ def draw_level_info(screen, tank):
     screen.blit(progress_text, progress_rect)
 
 
+def draw_leaderboard_tank(screen, x, y, tank_type, color, angle=0, scale=0.4):
+    size = int(20 * scale)
+    cannon_length = int(35 * scale)
+    cannon_width = int(12 * scale)
+
+    # Draw cannon(s) first, before the tank body
+    if tank_type == "twin":
+        offset = int(size * 0.3)
+        for offset_y in [-offset, offset]:
+            points = [
+                (x - cannon_width // 2, y + offset_y),
+                (x - cannon_width // 2, y + offset_y),
+                (x + cannon_length, y + offset_y),
+                (x + cannon_length, y + offset_y)
+            ]
+            pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y + offset_y), (x + cannon_length, y + offset_y),
+                             cannon_width + 2)
+            pygame.draw.line(screen, CANNONGREY, (x, y + offset_y), (x + cannon_length, y + offset_y), cannon_width)
+    elif tank_type == "flank":
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x + cannon_length, y), cannon_width + 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x + cannon_length, y), cannon_width)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x - cannon_length * 0.8, y), cannon_width + 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x - cannon_length * 0.8, y), cannon_width)
+    elif tank_type == "machine_gun":
+        points = [
+            (x - cannon_width // 2, y),
+            (x + cannon_length, y - cannon_width),
+            (x + cannon_length, y + cannon_width),
+        ]
+        pygame.draw.polygon(screen, CANNONOUTLINEGREY, points, 3)
+        pygame.draw.polygon(screen, CANNONGREY, points)
+    elif tank_type == "sniper":
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x + cannon_length * 1.2, y), cannon_width - 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x + cannon_length * 1.2, y), cannon_width - 4)
+    else:  # basic tank
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x + cannon_length, y), cannon_width + 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x + cannon_length, y), cannon_width)
+
+    # Draw tank body and outline after the cannons
+    outline_color = TANKOUTLINE if color == AQUA else ENEMYOUTLINE
+    pygame.draw.circle(screen, outline_color, (x, y), size + 2)
+    pygame.draw.circle(screen, color, (x, y), size)
+
 def draw_leaderboard(screen, player, enemies):
     # Constants for leaderboard
-    LEADERBOARD_WIDTH = 200
+    LEADERBOARD_WIDTH = 250
     LEADERBOARD_HEIGHT = 300
-    ENTRY_HEIGHT = 30
+    ENTRY_HEIGHT = 50
     PADDING = 10
 
     # Position leaderboard in top right corner
     leaderboard_x = SCREEN_WIDTH - LEADERBOARD_WIDTH - 10
-    leaderboard_y = 40  # Leave space for score display at very top
+    leaderboard_y = 40
 
     # Create list of all tanks and their scores
     scores_list = []
-    # Add player with special marking
     scores_list.append({
         'name': 'You',
         'score': player.score,
+        'tank_type': player.tank_type,
         'color': player.color,
         'isPlayer': True
     })
 
-    # Add enemies
-    for i, enemy in enumerate(enemies):
+    for enemy in enemies:
         if enemy.alive:
             scores_list.append({
-                'name': f'Enemy {enemy.enemy_index + 1}',
+                'name': 'Enemy',
                 'score': enemy.individual_score,
+                'tank_type': enemy.tank_type,
                 'color': enemy.color,
                 'isPlayer': False
             })
@@ -1392,7 +1446,7 @@ def draw_leaderboard(screen, player, enemies):
 
     # Draw background
     background_surface = pygame.Surface((LEADERBOARD_WIDTH, LEADERBOARD_HEIGHT), pygame.SRCALPHA)
-    background_surface.fill((255, 255, 255, 180))  # Semi-transparent white
+    background_surface.fill((255, 255, 255, 180))
     screen.blit(background_surface, (leaderboard_x, leaderboard_y))
 
     # Draw title
@@ -1408,27 +1462,23 @@ def draw_leaderboard(screen, player, enemies):
 
         # Draw rank
         rank_text = font_entry.render(f"#{i + 1}", True, BLACK)
-        screen.blit(rank_text, (leaderboard_x + PADDING, y_pos))
+        screen.blit(rank_text, (leaderboard_x + PADDING, y_pos + ENTRY_HEIGHT // 4))
 
-        # Draw name with color indicator
-        name_color = entry['color']
-        pygame.draw.circle(screen, name_color,
-                           (leaderboard_x + PADDING * 4, y_pos + ENTRY_HEIGHT // 2), 6)
+        # Draw tank
+        tank_x = leaderboard_x + PADDING * 8
+        tank_y = y_pos + ENTRY_HEIGHT // 2
+        draw_leaderboard_tank(screen, tank_x, tank_y, entry['tank_type'], entry['color'])
 
-        # Add outline to color indicator
-        pygame.draw.circle(screen, BLACK if entry['isPlayer'] else ENEMYOUTLINE,
-                           (leaderboard_x + PADDING * 4, y_pos + ENTRY_HEIGHT // 2), 6, 1)
-
+        # Draw name
         name_text = font_entry.render(entry['name'], True, BLACK)
-        screen.blit(name_text, (leaderboard_x + PADDING * 6, y_pos))
+        screen.blit(name_text, (leaderboard_x + PADDING * 14, y_pos + ENTRY_HEIGHT // 4))
 
         # Draw score
         score_text = font_entry.render(str(int(entry['score'])), True, BLACK)
         score_rect = score_text.get_rect()
         score_rect.right = leaderboard_x + LEADERBOARD_WIDTH - PADDING
-        score_rect.y = y_pos
+        score_rect.y = y_pos + ENTRY_HEIGHT // 4
         screen.blit(score_text, score_rect)
-
 
 def game_loop():
     global game_over, killer_object
