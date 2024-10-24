@@ -1414,75 +1414,117 @@ def draw_leaderboard_tank(screen, x, y, tank_type, color, angle=0, scale=0.4):
     pygame.draw.circle(screen, outline_color, (x, y), size + 2)
     pygame.draw.circle(screen, color, (x, y), size)
 
-def draw_leaderboard(screen, player, enemies):
+
+def create_leaderboard_surface():
     # Constants for leaderboard
     LEADERBOARD_WIDTH = 250
     LEADERBOARD_HEIGHT = 300
     ENTRY_HEIGHT = 50
     PADDING = 10
 
-    # Position leaderboard in top right corner
-    leaderboard_x = SCREEN_WIDTH - LEADERBOARD_WIDTH - 10
-    leaderboard_y = 40
+    # Create static font objects
+    font_title = pygame.font.SysFont(None, 36)
+    font_entry = pygame.font.SysFont(None, 24)
+
+    # Create the surface
+    leaderboard_surface = pygame.Surface((LEADERBOARD_WIDTH, LEADERBOARD_HEIGHT), pygame.SRCALPHA)
+
+    # Store important values in a dictionary for reuse
+    return {
+        'surface': leaderboard_surface,
+        'width': LEADERBOARD_WIDTH,
+        'height': LEADERBOARD_HEIGHT,
+        'entry_height': ENTRY_HEIGHT,
+        'padding': PADDING,
+        'font_title': font_title,
+        'font_entry': font_entry,
+        'last_update': 0,
+        'update_interval': 500,  # Update every 500ms
+        'cached_scores': None
+    }
+
+
+def update_leaderboard_surface(leaderboard_info, player, enemies, current_time):
+    # Check if it's time to update
+    if (current_time - leaderboard_info['last_update'] < leaderboard_info['update_interval'] and
+            leaderboard_info['cached_scores'] is not None):
+        return False
 
     # Create list of all tanks and their scores
-    scores_list = []
-    scores_list.append({
-        'name': 'You',
+    scores_list = [{
         'score': player.score,
         'tank_type': player.tank_type,
         'color': player.color,
         'isPlayer': True
-    })
+    }]
 
-    for enemy in enemies:
-        if enemy.alive:
-            scores_list.append({
-                'name': 'Enemy',
-                'score': enemy.individual_score,
-                'tank_type': enemy.tank_type,
-                'color': enemy.color,
-                'isPlayer': False
-            })
+    scores_list.extend([{
+        'score': enemy.individual_score,
+        'tank_type': enemy.tank_type,
+        'color': enemy.color,
+        'isPlayer': False
+    } for enemy in enemies if enemy.alive])
 
-    # Sort by score in descending order
+    # Sort by score
     scores_list.sort(key=lambda x: x['score'], reverse=True)
 
-    # Draw background
-    background_surface = pygame.Surface((LEADERBOARD_WIDTH, LEADERBOARD_HEIGHT), pygame.SRCALPHA)
-    background_surface.fill((255, 255, 255, 180))
-    screen.blit(background_surface, (leaderboard_x, leaderboard_y))
+    # If scores haven't changed, don't update
+    if scores_list == leaderboard_info['cached_scores']:
+        return False
+
+    leaderboard_info['cached_scores'] = scores_list
+    leaderboard_info['last_update'] = current_time
+
+    # Clear the surface
+    leaderboard_info['surface'].fill((255, 255, 255, 180))
 
     # Draw title
-    font_title = pygame.font.SysFont(None, 36)
-    title_text = font_title.render("Leaderboard", True, BLACK)
-    title_rect = title_text.get_rect(centerx=leaderboard_x + LEADERBOARD_WIDTH // 2, y=leaderboard_y + PADDING)
-    screen.blit(title_text, title_rect)
+    title_surface = leaderboard_info['font_title'].render("Leaderboard", True, BLACK)
+    title_rect = title_surface.get_rect(
+        centerx=leaderboard_info['width'] // 2,
+        y=leaderboard_info['padding']
+    )
+    leaderboard_info['surface'].blit(title_surface, title_rect)
 
     # Draw entries
-    font_entry = pygame.font.SysFont(None, 24)
     for i, entry in enumerate(scores_list):
-        y_pos = leaderboard_y + title_rect.height + PADDING * 2 + (i * ENTRY_HEIGHT)
+        y_pos = title_rect.height + leaderboard_info['padding'] * 2 + (i * leaderboard_info['entry_height'])
 
         # Draw rank
-        rank_text = font_entry.render(f"#{i + 1}", True, BLACK)
-        screen.blit(rank_text, (leaderboard_x + PADDING, y_pos + ENTRY_HEIGHT // 4))
+        rank_surface = leaderboard_info['font_entry'].render(f"#{i + 1}", True, BLACK)
+        leaderboard_info['surface'].blit(rank_surface,
+                                         (leaderboard_info['padding'], y_pos + leaderboard_info['entry_height'] // 4))
 
         # Draw tank
-        tank_x = leaderboard_x + PADDING * 8
-        tank_y = y_pos + ENTRY_HEIGHT // 2
-        draw_leaderboard_tank(screen, tank_x, tank_y, entry['tank_type'], entry['color'])
+        tank_x = leaderboard_info['padding'] * 8
+        tank_y = y_pos + leaderboard_info['entry_height'] // 2
+        draw_leaderboard_tank(leaderboard_info['surface'], tank_x, tank_y,
+                              entry['tank_type'], entry['color'])
 
         # Draw name
-        name_text = font_entry.render(entry['name'], True, BLACK)
-        screen.blit(name_text, (leaderboard_x + PADDING * 14, y_pos + ENTRY_HEIGHT // 4))
+        name_surface = leaderboard_info['font_entry'].render(
+            "You" if entry['isPlayer'] else "Enemy", True, BLACK)
+        leaderboard_info['surface'].blit(name_surface,
+                                         (leaderboard_info['padding'] * 14,
+                                          y_pos + leaderboard_info['entry_height'] // 4))
 
         # Draw score
-        score_text = font_entry.render(str(int(entry['score'])), True, BLACK)
-        score_rect = score_text.get_rect()
-        score_rect.right = leaderboard_x + LEADERBOARD_WIDTH - PADDING
-        score_rect.y = y_pos + ENTRY_HEIGHT // 4
-        screen.blit(score_text, score_rect)
+        score_surface = leaderboard_info['font_entry'].render(str(int(entry['score'])), True, BLACK)
+        score_rect = score_surface.get_rect()
+        score_rect.right = leaderboard_info['width'] - leaderboard_info['padding']
+        score_rect.y = y_pos + leaderboard_info['entry_height'] // 4
+        leaderboard_info['surface'].blit(score_surface, score_rect)
+
+    return True
+
+
+def draw_leaderboard(screen, leaderboard_info):
+    # Position leaderboard in top right corner
+    leaderboard_x = SCREEN_WIDTH - leaderboard_info['width'] - 10
+    leaderboard_y = 40
+
+    # Blit the pre-rendered surface
+    screen.blit(leaderboard_info['surface'], (leaderboard_x, leaderboard_y))
 
 def draw_leaderboard_indicator(visible):
     font = pygame.font.SysFont(None, 24)
@@ -1501,6 +1543,8 @@ def game_loop():
     player = Player()
     shapes = initialize_shapes(player)
     enemies = initialize_enemies() if include_enemies else []
+    # Add this line right after creating enemies:
+    leaderboard_info = create_leaderboard_surface()  # Add this line here
     running = True
     minimap_mode = 0
     leaderboard_visible = True  # Add this line
@@ -1650,17 +1694,18 @@ def game_loop():
 
         draw_upgrade_buttons(screen, player)
 
-        # Add leaderboard drawing here
-        if include_enemies and leaderboard_visible:
-            draw_leaderboard(screen, player, enemies)
-
         if minimap_mode > 0:
             draw_minimap(player, shapes, enemies, minimap_mode)
-
         draw_autofire_indicator(player)
         draw_autospin_indicator(player)
-        draw_leaderboard_indicator(leaderboard_visible)
+
         draw_minimap_indicator(minimap_mode)
+
+        # Add leaderboard drawing here
+        if include_enemies and leaderboard_visible:
+            update_leaderboard_surface(leaderboard_info, player, enemies, pygame.time.get_ticks())
+            draw_leaderboard(screen, leaderboard_info)
+        draw_leaderboard_indicator(leaderboard_visible)
 
         pygame.display.flip()
         clock.tick(60)
@@ -1672,6 +1717,7 @@ def game_loop():
             halfscore = scores[player.level//2]
             player = Player()
             player.score=halfscore
+            leaderboard_info = create_leaderboard_surface()  # Add this line here
             start_time = time.time()
 
     pygame.quit()
