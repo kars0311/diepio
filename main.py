@@ -60,6 +60,10 @@ TANKOUTLINE = (3, 133, 168)
 OUTOFBOUNDSCREENGREY = (183, 183, 183)
 OUTOFBOUNDSGRIDLINEGREY = (172, 172, 172)
 
+# Add these constants at the top of the file, after the other constants
+NORMAL_ZOOM = 1.0
+SNIPER_ZOOM = 0.7  # This will make everything appear 30% smaller, effectively increasing FOV
+
 # Create the screen object
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Diep.io")
@@ -123,6 +127,7 @@ class Tank:
         self.regen_rate = 0.1
         self.regen_cooldown = 0
         self.regen_cooldown_max = 180
+        self.zoom = NORMAL_ZOOM
 
     def draw(self, screen):
         if not self.alive:
@@ -131,48 +136,121 @@ class Tank:
         screen_x = self.world_x - self.world_x + self.x
         screen_y = self.world_y - self.world_y + self.y
 
+        # Scale sizes based on zoom
+        drawn_size = int(self.size * self.zoom)
+        drawn_cannon_length = int(self.cannon_length * self.zoom)
+        drawn_cannon_thickness = int(self.cannon_thickness * self.zoom)
+
         if self.tank_type == "basic":
-            self.draw_basic_cannon(screen, screen_x, screen_y)
+            self.draw_basic_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "twin":
-            self.draw_twin_cannons(screen, screen_x, screen_y)
+            self.draw_twin_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "flank":
-            self.draw_flank_cannons(screen, screen_x, screen_y)
+            self.draw_flank_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "machine_gun":
-            self.draw_machine_gun_cannon(screen, screen_x, screen_y)
+            self.draw_machine_gun_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "sniper":
-            self.draw_sniper_cannon(screen, screen_x, screen_y)
+            self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
         # Draw tank outline
-        pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
+        pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
 
         # Draw tank body
-        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
+        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), drawn_size)
 
-        self.draw_health_bar(screen, screen_x, screen_y)
+        self.draw_health_bar(screen, screen_x, screen_y, drawn_size)
 
-    def draw_health_bar(self, screen, screen_x, screen_y):
+    def draw_health_bar(self, screen, screen_x, screen_y, drawn_size):
         if self.health < self.max_health:
-            health_bar_width = self.size * 2
-            health_bar_height = 5
+            health_bar_width = drawn_size * 2
+            health_bar_height = int(5 * self.zoom)
             health_percentage = self.health / self.max_health
             health_bar_color = HEALTHBARGREEN
             pygame.draw.rect(screen, health_bar_color, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size + 5),
+                int(screen_y + drawn_size + 5 * self.zoom),
                 int(health_bar_width * health_percentage),
                 health_bar_height
             ))
             pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size + 5),
+                int(screen_y + drawn_size + 5 * self.zoom),
                 health_bar_width,
                 health_bar_height
-            ), 1)
+            ), max(1, int(self.zoom)))
 
-    def draw_cannon(self, screen, start_x, start_y, end_x, end_y):
+    def draw_basic_cannon(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[0] * self.zoom)
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
+
+    def draw_twin_cannons(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        for i in [-1, 1]:
+            recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[(i + 1) // 2] * self.zoom)
+            cannon_separation = self.cannon_separation * self.zoom
+            cannon_start_x = screen_x + i * math.cos(self.angle + math.pi / 2) * cannon_separation / 2
+            cannon_start_y = screen_y + i * math.sin(self.angle + math.pi / 2) * cannon_separation / 2
+            cannon_start_x -= math.cos(self.angle) * (self.size * 0.1 * self.zoom)
+            cannon_start_y -= math.sin(self.angle) * (self.size * 0.1 * self.zoom)
+            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+            self.draw_cannon(screen, cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
+
+    def draw_flank_cannons(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        # Front cannon
+        front_recoil_adjusted_length = (self.front_cannon_length * self.zoom) - (self.barrel_recoil[0] * self.zoom)
+        front_cannon_end_x = screen_x + math.cos(self.angle) * front_recoil_adjusted_length
+        front_cannon_end_y = screen_y + math.sin(self.angle) * front_recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, front_cannon_end_x, front_cannon_end_y, drawn_cannon_thickness)
+
+        # Back cannon
+        back_angle = self.angle + math.pi
+        back_recoil_adjusted_length = (self.back_cannon_length * self.zoom) - (self.barrel_recoil[1] * self.zoom)
+        back_cannon_end_x = screen_x + math.cos(back_angle) * back_recoil_adjusted_length
+        back_cannon_end_y = screen_y + math.sin(back_angle) * back_recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, back_cannon_end_x, back_cannon_end_y, drawn_cannon_thickness)
+
+    def draw_machine_gun_cannon(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[0] * self.zoom)
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+
+        base_width = drawn_cannon_thickness * 0.75
+        tip_width = drawn_cannon_thickness * 1
+
+        perpendicular_angle = self.angle + math.pi / 2
+        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
+        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
+        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
+        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
+
+        cannon_corners = [
+            (screen_x + base_offset_x, screen_y + base_offset_y),
+            (screen_x - base_offset_x, screen_y - base_offset_y),
+            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
+            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        ]
+
+        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
+
+        outline_thickness = max(1, int(3 * self.zoom))
+        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
+
+        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
+        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
+
+    def draw_sniper_cannon(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[0] * self.zoom)
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
+
+    def draw_cannon(self, screen, start_x, start_y, end_x, end_y, drawn_thickness):
         perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
-        half_thickness = self.cannon_thickness / 2
-        outline_thickness = 3
+        half_thickness = drawn_thickness / 2
+        outline_thickness = max(1, int(3 * self.zoom))
 
         outline_offset_x = math.cos(perpendicular_angle) * (half_thickness + outline_thickness)
         outline_offset_y = math.sin(perpendicular_angle) * (half_thickness + outline_thickness)
@@ -199,71 +277,6 @@ class Tank:
         end_line_start = (end_x - outline_offset_x, end_y - outline_offset_y)
         end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
         pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
-
-    def draw_basic_cannon(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y)
-
-    def draw_twin_cannons(self, screen, screen_x, screen_y):
-        for i in [-1, 1]:
-            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
-            cannon_start_x = screen_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_y = screen_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_x -= math.cos(self.angle) * self.size * 0.1
-            cannon_start_y -= math.sin(self.angle) * self.size * 0.1
-            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
-            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
-            self.draw_cannon(screen, cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y)
-
-    def draw_flank_cannons(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.front_cannon_length - self.barrel_recoil[0]
-        front_cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        front_cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, front_cannon_end_x, front_cannon_end_y)
-
-        back_angle = self.angle + math.pi
-        recoil_adjusted_length = self.back_cannon_length - self.barrel_recoil[1]
-        back_cannon_end_x = screen_x + math.cos(back_angle) * recoil_adjusted_length
-        back_cannon_end_y = screen_y + math.sin(back_angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, back_cannon_end_x, back_cannon_end_y)
-
-    def draw_machine_gun_cannon(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-
-        base_width = self.cannon_thickness * 0.75
-        tip_width = self.cannon_thickness * 1
-
-        perpendicular_angle = self.angle + math.pi / 2
-        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
-        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
-        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
-        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
-
-        cannon_corners = [
-            (screen_x + base_offset_x, screen_y + base_offset_y),
-            (screen_x - base_offset_x, screen_y - base_offset_y),
-            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
-            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        ]
-
-        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
-
-        outline_thickness = 3
-        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
-
-        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
-        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
-
-    def draw_sniper_cannon(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y)
 
     def create_bullet(self, x, y, angle):
         bullet_speed = 8
@@ -341,27 +354,33 @@ class Enemy(Tank):
         if not self.alive:
             return
 
-        screen_x = self.world_x - tank.world_x + tank.x
-        screen_y = self.world_y - tank.world_y + tank.y
+        # Calculate screen position using the player's zoom factor
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
+
+        # Use the player's zoom for size calculations
+        drawn_size = int(self.size * tank.zoom)
+        drawn_cannon_length = int(self.cannon_length * tank.zoom)
+        drawn_cannon_thickness = int(self.cannon_thickness * tank.zoom)
 
         if self.tank_type == "basic":
-            self.draw_basic_cannon(screen, screen_x, screen_y)
+            self.draw_basic_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "twin":
-            self.draw_twin_cannons(screen, screen_x, screen_y)
+            self.draw_twin_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "flank":
-            self.draw_flank_cannons(screen, screen_x, screen_y)
+            self.draw_flank_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "machine_gun":
-            self.draw_machine_gun_cannon(screen, screen_x, screen_y)
+            self.draw_machine_gun_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "sniper":
-            self.draw_sniper_cannon(screen, screen_x, screen_y)
+            self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
         # Draw enemy outline
-        pygame.draw.circle(screen, ENEMYOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
+        pygame.draw.circle(screen, ENEMYOUTLINE, (screen_x, screen_y), drawn_size + int(4 * tank.zoom))
 
         # Draw enemy body
-        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
+        pygame.draw.circle(screen, self.color, (screen_x, screen_y), drawn_size)
 
-        self.draw_health_bar(screen, screen_x, screen_y)
+        self.draw_health_bar(screen, screen_x, screen_y, drawn_size)
 
     def update(self, tank, shapes):
         if not self.alive:
@@ -602,6 +621,7 @@ class Player(Tank):
         self.cannon_length = 90
         self.barrel_recoil = [0]
         self.fire_rate = 1
+        self.zoom = SNIPER_ZOOM  # Add this line
         self.upgrade_available = False
 
     def update_level(self):
@@ -863,12 +883,15 @@ class Bullet:
         self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
 
     def draw(self, tank):
-        screen_x = int(self.world_x - tank.world_x + tank.x)
-        screen_y = int(self.world_y - tank.world_y + tank.y)
+        # Calculate screen position using the player's zoom factor
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
-            pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y), self.radius + 4)
-            pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.radius)
+            drawn_radius = int(self.radius * tank.zoom)
+            pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y),
+                             drawn_radius + int(4 * tank.zoom))
+            pygame.draw.circle(screen, self.color, (screen_x, screen_y), drawn_radius)
 
     def off_screen(self):
         return (self.world_x < self.radius or self.world_x > WORLD_WIDTH - self.radius or
@@ -1077,35 +1100,44 @@ class Shape:
         if not self.alive:
             return
 
-        screen_x = self.world_x - tank.world_x + tank.x
-        screen_y = self.world_y - tank.world_y + tank.y
+        # Calculate screen position using the player's zoom factor
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
-        screen_points = [(x - tank.world_x + tank.x, y - tank.world_y + tank.y) for x, y in self.points]
+        # Scale points based on zoom
+        screen_points = [
+            (int((x - tank.world_x) * tank.zoom + tank.x),
+             int((y - tank.world_y) * tank.zoom + tank.y))
+            for x, y in self.points
+        ]
 
         # Draw the filled shape
         pygame.draw.polygon(screen, self.color, screen_points)
 
         # Draw the outline with adjustable thickness
-        pygame.draw.polygon(screen, self.outline_color, screen_points, self.outline_thickness)
+        pygame.draw.polygon(screen, self.outline_color, screen_points,
+                            max(1, int(self.outline_thickness * tank.zoom)))
 
         # Draw health bar only if health is below max
         if self.health < self.max_health:
-            health_bar_width = self.size
-            health_bar_height = 5
+            health_bar_width = int(self.size * tank.zoom)
+            health_bar_height = int(5 * tank.zoom)
             health_percentage = self.health / self.max_health
             health_bar_color = HEALTHBARGREEN
+
             pygame.draw.rect(screen, health_bar_color, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size // 2 + 5),
+                int(screen_y + (self.size // 2) * tank.zoom + 5 * tank.zoom),
                 int(health_bar_width * health_percentage),
                 health_bar_height
             ))
+
             pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size // 2 + 5),
+                int(screen_y + (self.size // 2) * tank.zoom + 5 * tank.zoom),
                 health_bar_width,
                 health_bar_height
-            ), 1)
+            ), max(1, int(tank.zoom)))
 
 def draw_upgrade_buttons(screen, tank):
     if tank.level >= 15 and tank.tank_type == "basic":
@@ -1164,37 +1196,32 @@ def draw_autospin_indicator(tank):
 
 # Draw the grid-based terrain
 def draw_grid(tank):
-    cols = SCREEN_WIDTH // TILE_SIZE + 2  # Number of tiles needed to fill the width
-    rows = SCREEN_HEIGHT // TILE_SIZE + 2  # Number of tiles needed to fill the height
+    scaled_tile_size = int(TILE_SIZE * tank.zoom)
+    cols = SCREEN_WIDTH // scaled_tile_size + 2
+    rows = SCREEN_HEIGHT // scaled_tile_size + 2
 
-    # Calculate the offset based on the player's world position and movement
-    offset_x = (tank.world_x - tank.x) % TILE_SIZE
-    offset_y = (tank.world_y - tank.y) % TILE_SIZE
+    offset_x = ((tank.world_x - tank.x) * tank.zoom) % scaled_tile_size
+    offset_y = ((tank.world_y - tank.y) * tank.zoom) % scaled_tile_size
 
-    # Calculate the starting world coordinates of the visible area
     start_world_x = tank.world_x - tank.x
     start_world_y = tank.world_y - tank.y
 
-    # Loop through rows and columns and draw tiles
     for row in range(rows):
         for col in range(cols):
-            # Calculate tile position in screen coordinates
-            tile_x = col * TILE_SIZE - offset_x
-            tile_y = row * TILE_SIZE - offset_y
+            tile_x = col * scaled_tile_size - offset_x
+            tile_y = row * scaled_tile_size - offset_y
 
-            # Calculate the world coordinates of this tile
             world_tile_x = start_world_x + col * TILE_SIZE
             world_tile_y = start_world_y + row * TILE_SIZE
 
-            # Check if the tile is within the world bounds
             if (0 <= world_tile_x < WORLD_WIDTH and 0 <= world_tile_y < WORLD_HEIGHT):
-                # Draw the normal grid tile
-                pygame.draw.rect(screen, GRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+                pygame.draw.rect(screen, GRIDLINEGREY,
+                               (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
             else:
-                # Fill the out-of-bounds tile
-                pygame.draw.rect(screen, OUTOFBOUNDSCREENGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE))
-                # Draw the grid lines for out-of-bounds tiles
-                pygame.draw.rect(screen, OUTOFBOUNDSGRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+                pygame.draw.rect(screen, OUTOFBOUNDSCREENGREY,
+                               (tile_x, tile_y, scaled_tile_size, scaled_tile_size))
+                pygame.draw.rect(screen, OUTOFBOUNDSGRIDLINEGREY,
+                               (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
 
 def format_time(seconds):
     minutes, seconds = divmod(int(seconds), 60)
