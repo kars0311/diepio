@@ -71,6 +71,20 @@ pygame.display.set_caption("Diep.io")
 # Clock object to control game speed
 clock = pygame.time.Clock()
 
+
+def is_on_screen(world_x, world_y, size, tank):
+    """Helper function to check if an object is visible on screen"""
+    # Calculate screen coordinates
+    screen_x = (world_x - tank.world_x) * tank.zoom + tank.x
+    screen_y = (world_y - tank.world_y) * tank.zoom + tank.y
+
+    # Add padding equal to the object's size
+    padding = size * tank.zoom
+
+    # Check if object is within screen bounds (with padding)
+    return (-padding <= screen_x <= SCREEN_WIDTH + padding and
+            -padding <= screen_y <= SCREEN_HEIGHT + padding)
+
 def draw_menu(screen, clock):
     menu_font = pygame.font.Font(None, 74)
     option_font = pygame.font.Font(None, 50)
@@ -133,8 +147,13 @@ class Tank:
         if not self.alive:
             return
 
+        # Calculate screen position
         screen_x = self.world_x - self.world_x + self.x
         screen_y = self.world_y - self.world_y + self.y
+
+        # Early return if tank is not visible
+        if not is_on_screen(self.world_x, self.world_y, self.size + self.cannon_length, self):
+            return
 
         # Scale sizes based on zoom
         drawn_size = int(self.size * self.zoom)
@@ -352,6 +371,10 @@ class Enemy(Tank):
 
     def draw(self, tank):
         if not self.alive:
+            return
+
+        # Early return if enemy is not visible
+        if not is_on_screen(self.world_x, self.world_y, self.size + self.cannon_length, tank):
             return
 
         # Calculate screen position using the player's zoom factor
@@ -901,6 +924,9 @@ class Bullet:
         self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
 
     def draw(self, tank):
+        # Early return if bullet is not visible
+        if not is_on_screen(self.world_x, self.world_y, self.radius * 2, tank):
+            return
         # Calculate screen position using the player's zoom factor
         screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
         screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
@@ -958,6 +984,9 @@ class BulletCollisionEffect:
         self.alpha = max(0, self.alpha - self.fade_rate)
 
     def draw(self, tank):
+        # Early return if effect is not visible
+        if not is_on_screen(self.world_x, self.world_y, self.radius * 2, tank):
+            return
         screen_x = int(self.world_x - tank.world_x + tank.x)
         screen_y = int(self.world_y - tank.world_y + tank.y)
 
@@ -1116,6 +1145,10 @@ class Shape:
 
     def draw(self, tank):
         if not self.alive:
+            return
+
+        # Early return if shape is not visible
+        if not is_on_screen(self.world_x, self.world_y, self.size, tank):
             return
 
         # Calculate screen position using the player's zoom factor
