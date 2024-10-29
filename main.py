@@ -1086,9 +1086,10 @@ class Shape:
 
         # Check for collisions with other shapes
         for other in shapes:
-            if other != self and other.alive:
-                if self.check_collision(other):
-                    self.resolve_collision(other)
+            if (other.world_x-self.world_x)<100 and (other.world_x-self.world_x)>-100 and (other.world_y-self.world_y)<100 and (other.world_y-self.world_y)>-100:
+                if other != self and other.alive:
+                    if self.check_collision(other):
+                        self.resolve_collision(other)
 
     def update_points(self):
         self.points = []
