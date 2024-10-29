@@ -358,10 +358,28 @@ class Enemy(Tank):
         screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
         screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
-        # Use the player's zoom for size calculations
+        # Scale dimensions using the player's zoom
         drawn_size = int(self.size * tank.zoom)
-        drawn_cannon_length = int(self.cannon_length * tank.zoom)
-        drawn_cannon_thickness = int(self.cannon_thickness * tank.zoom)
+
+        # Update cannon dimensions based on tank type
+        if self.tank_type == "sniper":
+            drawn_cannon_length = int(90 * tank.zoom)  # Sniper has longer cannon
+            drawn_cannon_thickness = int(30 * tank.zoom)
+        elif self.tank_type == "machine_gun":
+            drawn_cannon_length = int(70 * tank.zoom)
+            drawn_cannon_thickness = int(50 * tank.zoom)
+        elif self.tank_type == "twin":
+            drawn_cannon_length = int(80 * tank.zoom)
+            drawn_cannon_thickness = int(30 * tank.zoom)
+            self.cannon_separation = int(self.size * 1.0 * tank.zoom)
+        elif self.tank_type == "flank":
+            self.front_cannon_length = int(75 * tank.zoom)
+            self.back_cannon_length = int(60 * tank.zoom)
+            drawn_cannon_length = self.front_cannon_length
+            drawn_cannon_thickness = int(30 * tank.zoom)
+        else:  # basic tank
+            drawn_cannon_length = int(75 * tank.zoom)
+            drawn_cannon_thickness = int(30 * tank.zoom)
 
         if self.tank_type == "basic":
             self.draw_basic_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
