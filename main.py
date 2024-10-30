@@ -987,13 +987,18 @@ class BulletCollisionEffect:
         # Early return if effect is not visible
         if not is_on_screen(self.world_x, self.world_y, self.radius * 2, tank):
             return
-        screen_x = int(self.world_x - tank.world_x + tank.x)
-        screen_y = int(self.world_y - tank.world_y + tank.y)
+
+        # Calculate screen position using tank's zoom factor
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
+
+        # Scale radius with zoom factor
+        drawn_radius = int(self.radius * tank.zoom)
 
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
-            surface = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(surface, (*self.color, self.alpha), (self.radius, self.radius), self.radius)
-            screen.blit(surface, (screen_x - self.radius, screen_y - self.radius))
+            surface = pygame.Surface((drawn_radius * 2, drawn_radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(surface, (*self.color, self.alpha), (drawn_radius, drawn_radius), drawn_radius)
+            screen.blit(surface, (screen_x - drawn_radius, screen_y - drawn_radius))
 
     def is_finished(self):
         return self.alpha <= 0
