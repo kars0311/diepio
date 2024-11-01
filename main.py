@@ -25,12 +25,14 @@ UPGRADE_BUTTON_HEIGHT = 40
 UPGRADE_BUTTON_MARGIN = 10
 
 # attribute constants
-ATTRIBUTE_BAR_WIDTH = 200
 ATTRIBUTE_BAR_HEIGHT = 20
-ATTRIBUTE_SECTION_HEIGHT = 25
-PLUS_BUTTON_SIZE = 20
-ATTRIBUTES_X = 10
-ATTRIBUTES_Y = SCREEN_HEIGHT - 250
+ATTRIBUTES_X = 10  # X position of attributes section
+ATTRIBUTES_Y = SCREEN_HEIGHT - 250  # Y position of attributes section
+ATTRIBUTE_BAR_WIDTH = 200  # Width of attribute progress bar
+ATTRIBUTE_SECTION_HEIGHT = 25  # Height of each attribute section
+PLUS_BUTTON_SIZE = 20  # Size of the plus button
+
+
 
 levels = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45])
 scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 787, 938, 1109, 1301, 1516, 1757, 2026, 2325, 2658, 3026, 3433, 3883, 4379, 4925, 5525, 6184, 6907, 7698, 8537, 9426, 10368, 11367, 12426, 13549, 14739, 16000, 17337, 18754, 20256, 21849, 23536])
@@ -1386,53 +1388,12 @@ def handle_upgrade_click(tank, mouse_pos):
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
     return False
 
-
-def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
-    if player.available_points <= 0:
-        return False
-
-    # If attribute_name is provided and is a valid string key
-    if isinstance(attribute_name, str) and attribute_name in player.attribute_levels:
-        if player.attribute_levels[attribute_name] < player.max_attribute_level:
-            player.attribute_levels[attribute_name] += 1
-            player.available_points -= 1
-            player.update_stats()
-            player.attributes_need_update = True
-            update_attribute_surface(player)
-            return True
-        return False
-
-    # If mouse_pos is provided (click handling)
-    if mouse_pos:
-        # Calculate relative position
-        relative_y = mouse_pos[1] - (ATTRIBUTES_Y - 50)
-        relative_x = mouse_pos[0] - ATTRIBUTES_X
-
-        # Map Y position to attributes
-        y = 50  # Start below points indicator
-        for attribute in player.attribute_levels:
-            if player.attribute_levels[attribute] < player.max_attribute_level:
-                button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
-                button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
-
-                if button_rect.collidepoint(relative_x, relative_y):
-                    player.attribute_levels[attribute] += 1
-                    player.available_points -= 1
-                    player.update_stats()
-                    player.attributes_need_update = True
-                    update_attribute_surface(player)
-                    return True
-
-            y += ATTRIBUTE_SECTION_HEIGHT
-
-    return False
-
 def create_attributes_surface(player):
     # Create a surface for attributes display
-    ATTRIBUTES_SURFACE_WIDTH = ATTRIBUTE_BAR_WIDTH + 200  # Adjust as needed
-    ATTRIBUTES_SURFACE_HEIGHT = 300  # Adjust as needed
+    ATTRIBUTES_SURFACE_WIDTH = ATTRIBUTE_BAR_WIDTH + 200
+    ATTRIBUTES_SURFACE_HEIGHT = 300
     surface = pygame.Surface((ATTRIBUTES_SURFACE_WIDTH, ATTRIBUTES_SURFACE_HEIGHT), pygame.SRCALPHA)
-    surface.fill((0, 0, 0, 0))  # Make surface transparent
+    surface.fill((0, 0, 0, 0))
 
     # Draw available points indicator
     if player.available_points > 0:
@@ -1446,6 +1407,9 @@ def create_attributes_surface(player):
     font = pygame.font.SysFont(None, 24)
     y = 50  # Start below points indicator
 
+    # Store button positions for click detection
+    player.upgrade_buttons = {}  # Add this as a class attribute to store button positions
+
     for attribute, level in player.attribute_levels.items():
         # Draw attribute name
         name_surface = font.render(attribute, True, BLACK)
@@ -1455,7 +1419,7 @@ def create_attributes_surface(player):
         bar_rect = pygame.Rect(150, y, ATTRIBUTE_BAR_WIDTH, ATTRIBUTE_BAR_HEIGHT)
         pygame.draw.rect(surface, GRAY, bar_rect)
 
-        # Draw filled portion of bar - fixed this part
+        # Draw filled portion of bar
         if level > 0:
             filled_width = int((ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * level)
             filled_rect = pygame.Rect(150, y, filled_width, ATTRIBUTE_BAR_HEIGHT)
@@ -1465,13 +1429,20 @@ def create_attributes_surface(player):
         for i in range(player.max_attribute_level):
             segment_x = 150 + (ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * i
             pygame.draw.line(surface, BLACK,
-                           (segment_x, y),
-                           (segment_x, y + ATTRIBUTE_BAR_HEIGHT))
+                             (segment_x, y),
+                             (segment_x, y + ATTRIBUTE_BAR_HEIGHT))
 
         # Draw plus button if upgrades available
         if player.available_points > 0 and level < player.max_attribute_level:
             button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
             button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
+
+            # Store the button position relative to the attribute surface
+            player.upgrade_buttons[attribute] = {
+                'rect': button_rect,
+                'y_offset': y
+            }
+
             pygame.draw.rect(surface, GREEN, button_rect)
             pygame.draw.rect(surface, BLACK, button_rect, 2)
 
@@ -1483,6 +1454,47 @@ def create_attributes_surface(player):
         y += ATTRIBUTE_SECTION_HEIGHT
 
     return surface
+
+def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
+    if player.available_points <= 0:
+        return False
+
+    # Handle keyboard shortcuts
+    if attribute_name is not None and isinstance(attribute_name, str):
+        if player.attribute_levels[attribute_name] < player.max_attribute_level:
+            player.attribute_levels[attribute_name] += 1
+            player.available_points -= 1
+            player.update_stats()
+            player.attributes_need_update = True
+            update_attribute_surface(player)
+            return True
+        return False
+
+    # Handle mouse clicks
+    if mouse_pos and hasattr(player, 'upgrade_buttons'):
+        mouse_x, mouse_y = mouse_pos
+        attributes_x = ATTRIBUTES_X
+        attributes_y = ATTRIBUTES_Y - 50  # Adjust for the surface position offset
+
+        # Check each button's absolute position
+        for attribute, button_info in player.upgrade_buttons.items():
+            absolute_rect = pygame.Rect(
+                attributes_x + button_info['rect'].x,
+                attributes_y + button_info['y_offset'],
+                button_info['rect'].width,
+                button_info['rect'].height
+            )
+
+            if absolute_rect.collidepoint(mouse_x, mouse_y):
+                if player.attribute_levels[attribute] < player.max_attribute_level:
+                    player.attribute_levels[attribute] += 1
+                    player.available_points -= 1
+                    player.update_stats()
+                    player.attributes_need_update = True
+                    update_attribute_surface(player)
+                    return True
+
+    return False
 
 def update_attribute_surface(player):
     # Update the cached surface only when needed
@@ -1918,41 +1930,42 @@ def game_loop():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
-                if player.shoot_cooldown <= 0:
-                    player.shoot()
-                if event.button == 1:
-                    if handle_attribute_upgrade(player, event.pos):
-                        continue
+                if event.button == 1:  # Left mouse button
+                    # Handle attribute upgrades first
+                    if handle_attribute_upgrade(player, mouse_pos=event.pos):
+                        continue  # Skip other click handling if upgrade was successful
+                    # Then handle tank upgrades
                     if handle_upgrade_click(player, event.pos):
-                        continue
+                        continue  # Skip shooting if upgrade was successful
+                    # Finally handle shooting
                     if player.shoot_cooldown <= 0:
                         player.shoot()
             elif event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_e:
-                            player.autofire = not player.autofire
-                        elif event.key == pygame.K_c:
-                            player.autospin = not player.autospin
-                        elif event.key == pygame.K_o:
-                            player.take_damage(player.health, "Self-Destruct")
-                        elif event.key == pygame.K_TAB:
-                            minimap_mode = (minimap_mode + 1) % 5
-                        elif event.key == pygame.K_l:
-                            leaderboard_visible = not leaderboard_visible
-                        # Add number key handling for attributes
-                        elif event.key in [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
-                                           pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8]:
-                            # Map number keys to attributes
-                            attribute_map = {
-                                pygame.K_1: "Health Regen",
-                                pygame.K_2: "Max Health",
-                                pygame.K_3: "Body Damage",
-                                pygame.K_4: "Bullet Speed",
-                                pygame.K_5: "Bullet Penetration",
-                                pygame.K_6: "Bullet Damage",
-                                pygame.K_7: "Reload",
-                                pygame.K_8: "Movement Speed"
-                            }
-                            handle_attribute_upgrade(player, attribute_map[event.key])
+                if event.key == pygame.K_e:
+                    player.autofire = not player.autofire
+                elif event.key == pygame.K_c:
+                    player.autospin = not player.autospin
+                elif event.key == pygame.K_o:
+                    player.take_damage(player.health, "Self-Destruct")
+                elif event.key == pygame.K_TAB:
+                    minimap_mode = (minimap_mode + 1) % 5
+                elif event.key == pygame.K_l:
+                    leaderboard_visible = not leaderboard_visible
+                # Add number key handling for attributes
+                elif event.key in [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
+                                   pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8]:
+                    # Map number keys to attributes
+                    attribute_map = {
+                        pygame.K_1: "Health Regen",
+                        pygame.K_2: "Max Health",
+                        pygame.K_3: "Body Damage",
+                        pygame.K_4: "Bullet Speed",
+                        pygame.K_5: "Bullet Penetration",
+                        pygame.K_6: "Bullet Damage",
+                        pygame.K_7: "Reload",
+                        pygame.K_8: "Movement Speed"
+                    }
+                    handle_attribute_upgrade(player, attribute_map[event.key])
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_k]:
