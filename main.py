@@ -776,19 +776,7 @@ class Player(Tank):
 
         # Calculate points to award based on level change
         if self.level > previous_level:
-            for level in range(previous_level + 1, self.level + 1):
-                # Points from level 2-28 (27 points)
-                if level >= 2 and level <= 28:
-                    self.available_points += 1
-                # Point at level 30 (1 point)
-                elif level == 30:
-                    self.available_points += 1
-                # Points at levels 33, 36, 39, 42, 45 (5 points)
-                elif level > 30 and level <= 45 and (level - 30) % 3 == 0:
-                    self.available_points += 1
-
-            print(
-                f"Level up! Now level {self.level} with {self.available_points} upgrade points available")  # Debug message
+            self.award_upgrade_points(previous_level, self.level)
 
     def level_up(self):
         if self.level < 45:
@@ -806,6 +794,22 @@ class Player(Tank):
             elif self.level > 30 and self.level <= 45 and (self.level - 30) % 3 == 0:
                 self.available_points += 1
                 self.attributes_need_update = True  # Mark for update
+
+    def award_upgrade_points(self, previous_level, new_level):
+        """Awards upgrade points based on level changes."""
+        for level in range(previous_level + 1, new_level + 1):
+            # Points from level 2-28 (27 points)
+            if level >= 2 and level <= 28:
+                self.available_points += 1
+                self.attributes_need_update = True
+            # Point at level 30 (1 point)
+            elif level == 30:
+                self.available_points += 1
+                self.attributes_need_update = True
+            # Points at levels 33, 36, 39, 42, 45 (5 points)
+            elif level > 30 and level <= 45 and (level - 30) % 3 == 0:
+                self.available_points += 1
+                self.attributes_need_update = True
 
     def get_progress_to_next_level(self):
         if self.level >= len(levels):
@@ -2055,7 +2059,6 @@ def game_loop():
         draw_grid(player)
         draw_score(screen, player.score)
         draw_level_info(screen, player)
-        draw_attributes(screen, player)
 
         for shape in shapes:
             shape.draw(player)
@@ -2079,6 +2082,7 @@ def game_loop():
             bullet.draw(player)
 
         draw_upgrade_buttons(screen, player)
+        draw_attributes(screen, player)
 
         if minimap_mode > 0:
             draw_minimap(player, shapes, enemies, minimap_mode)
