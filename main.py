@@ -331,25 +331,11 @@ class Tank:
         pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
 
     def create_bullet(self, x, y, angle):
-        if isinstance(self, Player):
-            # Apply bullet speed multiplier for player
-            bullet_speed = self.base_stats["Bullet Speed"] * (1 + self.attribute_levels["Bullet Speed"] * 0.2)
-            if self.tank_type == "sniper":
-                bullet_speed = bullet_speed * 1.5  # Sniper gets 50% more base speed
-
-            # Calculate velocity components with the modified speed
-            vel_x = math.cos(angle) * bullet_speed
-            vel_y = math.sin(angle) * bullet_speed
-        else:
-            # For enemies, use the old logic
-            bullet_speed = 8
-            if self.tank_type == "sniper":
-                bullet_speed = 12
-            vel_x = math.cos(angle) * bullet_speed
-            vel_y = math.sin(angle) * bullet_speed
-
-        bullet = Bullet(x, y, vel_x, vel_y, 1 if isinstance(self, Enemy) else 0, self)
-        bullet.owner = self
+        bullet_speed = 8
+        if self.tank_type == "sniper":
+            bullet_speed = 12
+        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1 if isinstance(self, Enemy) else 0)
+        bullet.owner = self  # Set the owner reference
         self.bullets.append(bullet)
 
     def take_damage(self, damage, attacker=None):
@@ -1042,15 +1028,14 @@ class Bullet:
     def __init__(self, x, y, vel_x, vel_y, tankNum, owner=None):
         self.world_x = x
         self.world_y = y
-        self.vel_x = vel_x
-        self.vel_y = vel_y
-
         if owner and isinstance(owner, Player):
-            # Get damage directly from the player's stats
-            self.damage = owner.bullet_damage  # This is already calculated in update_stats()
+            self.vel_x = vel_x
+            self.vel_y = vel_y
+            self.damage = owner.bullet_damage
         else:
+            self.vel_x = vel_x
+            self.vel_y = vel_y
             self.damage = 25 - (tankNum * 15)
-
         self.base_radius = BASE_BULLET_SIZE
         self.radius = self.base_radius
         self.lifespan = 200
@@ -1386,29 +1371,41 @@ def handle_upgrade_click(tank, mouse_pos):
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
     return False
 
-def handle_attribute_upgrade(player, mouse_pos):
+def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
     if player.available_points <= 0:
         return False
 
-    # Adjust mouse position to be relative to the attributes surface
-    relative_y = mouse_pos[1] - (ATTRIBUTES_Y - 50)
-    relative_x = mouse_pos[0] - ATTRIBUTES_X
+    # If attribute_name is provided, use it directly
+    if attribute_name is not None:
+        if player.attribute_levels[attribute_name] < player.max_attribute_level:
+            player.attribute_levels[attribute_name] += 1
+            player.available_points -= 1
+            player.update_stats()
+            player.attributes_need_update = True
+            update_attribute_surface(player)
+            return True
+        return False
 
-    y = 50  # Start below points indicator
-    for attribute, level in player.attribute_levels.items():
-        if level < player.max_attribute_level:
-            button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
-            button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
+    # Otherwise, handle mouse click logic
+    if mouse_pos:
+        relative_y = mouse_pos[1] - (ATTRIBUTES_Y - 50)
+        relative_x = mouse_pos[0] - ATTRIBUTES_X
 
-            if (button_rect.collidepoint(relative_x, relative_y)):
-                player.attribute_levels[attribute] += 1
-                player.available_points -= 1
-                player.update_stats()
-                player.attributes_need_update = True
-                update_attribute_surface(player)  # Immediately update the surface
-                return True
+        y = 50  # Start below points indicator
+        for attribute, level in player.attribute_levels.items():
+            if level < player.max_attribute_level:
+                button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
+                button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
 
-        y += ATTRIBUTE_SECTION_HEIGHT
+                if (button_rect.collidepoint(relative_x, relative_y)):
+                    player.attribute_levels[attribute] += 1
+                    player.available_points -= 1
+                    player.update_stats()
+                    player.attributes_need_update = True
+                    update_attribute_surface(player)
+                    return True
+
+            y += ATTRIBUTE_SECTION_HEIGHT
     return False
 
 def create_attributes_surface(player):
@@ -1912,16 +1909,31 @@ def game_loop():
                     if player.shoot_cooldown <= 0:
                         player.shoot()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_e:
-                    player.autofire = not player.autofire
-                elif event.key == pygame.K_c:
-                    player.autospin = not player.autospin
-                elif event.key == pygame.K_o:
-                    player.take_damage(player.health, "Self-Destruct")
-                elif event.key == pygame.K_TAB:
-                    minimap_mode = (minimap_mode + 1) % 5
-                elif event.key == pygame.K_l:
-                    leaderboard_visible = not leaderboard_visible
+                        if event.key == pygame.K_e:
+                            player.autofire = not player.autofire
+                        elif event.key == pygame.K_c:
+                            player.autospin = not player.autospin
+                        elif event.key == pygame.K_o:
+                            player.take_damage(player.health, "Self-Destruct")
+                        elif event.key == pygame.K_TAB:
+                            minimap_mode = (minimap_mode + 1) % 5
+                        elif event.key == pygame.K_l:
+                            leaderboard_visible = not leaderboard_visible
+                        # Add number key handling for attributes
+                        elif event.key in [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
+                                           pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8]:
+                            # Map number keys to attributes
+                            attribute_map = {
+                                pygame.K_1: "Health Regen",
+                                pygame.K_2: "Max Health",
+                                pygame.K_3: "Body Damage",
+                                pygame.K_4: "Bullet Speed",
+                                pygame.K_5: "Bullet Penetration",
+                                pygame.K_6: "Bullet Damage",
+                                pygame.K_7: "Reload",
+                                pygame.K_8: "Movement Speed"
+                            }
+                            handle_attribute_upgrade(player, attribute_map[event.key])
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_k]:
