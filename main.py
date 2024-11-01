@@ -175,6 +175,10 @@ class Tank:
         elif self.tank_type == "flank":
             self.front_cannon_length = int(75 * self.zoom)
             self.back_cannon_length = int(60 * self.zoom)
+        elif self.tank_type == "gunner":
+            self.cannon_length = int(70 * self.zoom)
+            self.cannon_thickness = int(10 * self.zoom)  # Thinner cannons
+            self.cannon_separation = int(self.base_size * 0.3 * self.zoom)  # Space between cannons
         else:
             self.cannon_length = int(75 * self.zoom)
 
@@ -205,6 +209,8 @@ class Tank:
             self.draw_machine_gun_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "sniper":
             self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+        elif self.tank_type == "gunner":
+            self.draw_gunner_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
         # Draw tank outline
         pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
@@ -332,27 +338,106 @@ class Tank:
         end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
         pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
 
+    def draw_gunner_cannons(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        # Define cannon positions and lengths
+        # Format: (vertical_offset, is_long_cannon, thickness_multiplier)
+        cannon_configs = [
+            (-3, False, 0.8),  # Top short cannon - thinner
+            (-1.5, True, 1.3),  # Upper long cannon - normal thickness
+            (1.5, True, 1.3),  # Lower long cannon - normal thickness
+            (3, False, 0.8)  # Bottom short cannon - thinner
+        ]
+
+        for i, (pos, is_long, thickness_mult) in enumerate(cannon_configs):
+            # Use appropriate length based on cannon position
+            base_length = self.long_cannon_length if is_long else self.short_cannon_length
+            drawn_base_length = int(base_length * self.zoom)
+            recoil_adjusted_length = drawn_base_length - (self.barrel_recoil[i] * self.zoom)
+            offset = pos * (self.cannon_separation * self.zoom)
+
+            # Calculate cannon start position
+            cannon_start_x = screen_x + math.cos(self.angle + math.pi / 2) * offset
+            cannon_start_y = screen_y + math.sin(self.angle + math.pi / 2) * offset
+
+            # Calculate cannon end position
+            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+
+            # Draw cannon with outline
+            perpendicular_angle = self.angle + math.pi / 2
+            outline_thickness = max(1, int(2 * self.zoom))
+
+            # Adjust thickness based on whether it's an inner or outer cannon
+            current_thickness = drawn_cannon_thickness * thickness_mult
+
+            # Calculate outline points with adjusted thickness
+            outline_offset = current_thickness / 2 + outline_thickness
+            outline_points = [
+                (cannon_start_x + math.cos(perpendicular_angle) * outline_offset,
+                 cannon_start_y + math.sin(perpendicular_angle) * outline_offset),
+                (cannon_start_x - math.cos(perpendicular_angle) * outline_offset,
+                 cannon_start_y - math.sin(perpendicular_angle) * outline_offset),
+                (cannon_end_x - math.cos(perpendicular_angle) * outline_offset,
+                 cannon_end_y - math.sin(perpendicular_angle) * outline_offset),
+                (cannon_end_x + math.cos(perpendicular_angle) * outline_offset,
+                 cannon_end_y + math.sin(perpendicular_angle) * outline_offset)
+            ]
+
+            # Draw cannon outline
+            pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_points)
+
+            # Calculate inner cannon points with adjusted thickness
+            cannon_points = [
+                (cannon_start_x + math.cos(perpendicular_angle) * current_thickness / 2,
+                 cannon_start_y + math.sin(perpendicular_angle) * current_thickness / 2),
+                (cannon_start_x - math.cos(perpendicular_angle) * current_thickness / 2,
+                 cannon_start_y - math.sin(perpendicular_angle) * current_thickness / 2),
+                (cannon_end_x - math.cos(perpendicular_angle) * current_thickness / 2,
+                 cannon_end_y - math.sin(perpendicular_angle) * current_thickness / 2),
+                (cannon_end_x + math.cos(perpendicular_angle) * current_thickness / 2,
+                 cannon_end_y + math.sin(perpendicular_angle) * current_thickness / 2)
+            ]
+
+            # Draw inner cannon
+            pygame.draw.polygon(screen, CANNONGREY, cannon_points)
+
     def create_bullet(self, x, y, angle):
         if isinstance(self, Player):
             # Apply bullet speed multiplier for player
             bullet_speed = self.base_stats["Bullet Speed"] * (1 + self.attribute_levels["Bullet Speed"] * 0.2)
+
+            # Adjust speed based on tank type
             if self.tank_type == "sniper":
                 bullet_speed = bullet_speed * 1.5  # Sniper gets 50% more base speed
+            elif self.tank_type == "gunner":
+                bullet_speed = bullet_speed * 1.2  # Gunner gets 20% more base speed
 
             # Calculate velocity components with the modified speed
             vel_x = math.cos(angle) * bullet_speed
             vel_y = math.sin(angle) * bullet_speed
+
+            # Create bullet with tank-specific properties
+            bullet = Bullet(x, y, vel_x, vel_y, 0, self)
+            bullet.owner = self
+
+            # Set bullet size based on tank type
+            if self.tank_type == "gunner":
+                bullet.base_radius = int(BASE_BULLET_SIZE * 0.4)  # 40% of normal size
+                bullet.radius = bullet.base_radius
+                bullet.damage = self.bullet_damage * 0.4  # Reduce damage to match size
+
+            self.bullets.append(bullet)
         else:
-            # For enemies, use the old logic
+            # Original enemy bullet creation logic
             bullet_speed = 8
             if self.tank_type == "sniper":
                 bullet_speed = 12
             vel_x = math.cos(angle) * bullet_speed
             vel_y = math.sin(angle) * bullet_speed
 
-        bullet = Bullet(x, y, vel_x, vel_y, 1 if isinstance(self, Enemy) else 0, self)
-        bullet.owner = self
-        self.bullets.append(bullet)
+            bullet = Bullet(x, y, vel_x, vel_y, 1, self)
+            bullet.owner = self
+            self.bullets.append(bullet)
 
     def take_damage(self, damage, attacker=None):
         self.health -= damage
@@ -770,6 +855,18 @@ class Player(Tank):
         self.fire_rate = 1
         self.upgrade_available = False
 
+    def upgrade_to_gunner(self):
+        self.tank_type = "gunner"
+        # Adjust cannon lengths - center cannons longer than outer ones
+        self.long_cannon_length = TILE_SIZE * 2.8  # 70 pixels for middle cannons
+        self.short_cannon_length = TILE_SIZE * 2.4  # 60 pixels for outer cannons
+        self.cannon_thickness = TILE_SIZE * 0.5  # 10 pixels
+        self.barrel_recoil = [0, 0, 0, 0]  # One for each cannon
+        self.cannon_separation = self.base_size * 0.3  # Smaller separation between cannons
+        self.bullet_size_multiplier = 0.4  # Smaller bullets
+        self.base_reload = self.base_stats["Reload"] * 0.6  # 40% faster base reload
+        self.upgrade_available = False
+
     def update_level(self):
         previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
@@ -871,6 +968,9 @@ class Player(Tank):
             if self.tank_type == "basic":
                 self.shoot_basic()
                 self.shoot_cooldown = self.base_reload
+            elif self.tank_type == "gunner":
+                self.shoot_gunner()
+                self.shoot_cooldown = self.base_reload * 0.4  # Even faster shooting
             elif self.tank_type == "twin":
                 self.shoot_twin()
                 self.shoot_cooldown = self.base_reload / 2
@@ -944,6 +1044,59 @@ class Player(Tank):
         bullet_y = self.world_y + math.sin(self.angle) * self.size
         self.create_bullet(bullet_x, bullet_y, self.angle)
         self.barrel_recoil[0] = self.max_barrel_recoil
+
+    def shoot_gunner(self):
+        # We'll only fire one bullet per shoot call now
+        # Get the current firing phase (0-3) based on shot count
+        phase = (getattr(self, 'gunner_shot_count', 0) % 4)
+
+        # Initialize shot count if it doesn't exist
+        if not hasattr(self, 'gunner_shot_count'):
+            self.gunner_shot_count = 0
+
+        # Define the firing sequence (2,3,1,4 in terms of 0-based indices)
+        firing_sequence = [1, 2, 0, 3]  # Convert to 0-based indices
+        current_turret = firing_sequence[phase]
+
+        # Match cannon configurations but only fire from one
+        cannon_configs = [
+            (-3, False, 0.8),  # Turret 1 (index 0) - Left outer
+            (-1.5, True, 1.3),  # Turret 2 (index 1) - Left inner
+            (1.5, True, 1.3),  # Turret 3 (index 2) - Right inner
+            (3, False, 0.8)  # Turret 4 (index 3) - Right outer
+        ]
+
+        # Get the configuration for the current turret
+        pos, is_long, _ = cannon_configs[current_turret]
+
+        # Calculate the offset based on cannon position
+        offset = pos * self.cannon_separation
+
+        # Calculate perpendicular offset for cannon position
+        perp_x = math.cos(self.angle + math.pi / 2) * offset
+        perp_y = math.sin(self.angle + math.pi / 2) * offset
+
+        # Use appropriate length based on whether it's a long or short cannon
+        base_length = self.long_cannon_length if is_long else self.short_cannon_length
+        recoil_adjusted_length = base_length - self.barrel_recoil[current_turret]
+
+        # Calculate cannon tip position
+        cannon_tip_x = self.world_x + perp_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_tip_y = self.world_y + perp_y + math.sin(self.angle) * recoil_adjusted_length
+
+        # Create bullet at the exact cannon tip position
+        self.create_bullet(cannon_tip_x, cannon_tip_y, self.angle)
+
+        # Apply recoil only to the fired cannon
+        self.barrel_recoil[current_turret] = self.max_barrel_recoil * 0.7
+
+        # Add slight recoil to tank movement (reduced since it's only one bullet)
+        recoil_force = 0.2
+        self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
+        self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
+
+        # Increment the shot counter
+        self.gunner_shot_count += 1
 
     def handle_autofire(self):
         if self.autofire and self.shoot_cooldown <= 0:
@@ -1373,6 +1526,16 @@ def draw_upgrade_buttons(screen, tank):
             screen.blit(text, text_rect)
 
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
+    if tank.level >= 30 and tank.tank_type == "machine_gun":
+        font = pygame.font.SysFont(None, 24)
+        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
+                                  UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+        pygame.draw.rect(screen, WHITE, button_rect)
+        pygame.draw.rect(screen, BLACK, button_rect, 2)
+
+        text = font.render("Gunner", True, BLACK)
+        text_rect = text.get_rect(center=button_rect.center)
+        screen.blit(text, text_rect)
 
 def handle_upgrade_click(tank, mouse_pos):
     if tank.level >= 15 and tank.tank_type == "basic":
@@ -1390,6 +1553,12 @@ def handle_upgrade_click(tank, mouse_pos):
                     tank.upgrade_to_sniper()
                 return True
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
+    if tank.level >= 30 and tank.tank_type == "machine_gun":
+        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
+                                UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+        if button_rect.collidepoint(mouse_pos):
+            tank.upgrade_to_gunner()
+            return True
     return False
 
 def create_attributes_surface(player):
