@@ -11,11 +11,26 @@ pygame.init()
 SCREEN_WIDTH, SCREEN_HEIGHT = 1425, 900 #1440/780
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
 TILE_SIZE = 25
+BASE_TANK_SIZE = TILE_SIZE * 1.6  # 40 pixels
+BASE_BULLET_SIZE = TILE_SIZE * 0.6  # 15 pixels
+BASE_SQUARE_SIZE = TILE_SIZE * 1.6  # 40 pixels
+BASE_TRIANGLE_SIZE = TILE_SIZE * 2.4  # 60 pixels
+BASE_PENTAGON_SIZE = TILE_SIZE * 3.2  # 80 pixels
+NORMAL_ZOOM = 1.0
+SNIPER_ZOOM = 0.85
 
 # Add these constants at the top of your file
 UPGRADE_BUTTON_WIDTH = 150
 UPGRADE_BUTTON_HEIGHT = 40
 UPGRADE_BUTTON_MARGIN = 10
+
+# attribute constants
+ATTRIBUTE_BAR_WIDTH = 200
+ATTRIBUTE_BAR_HEIGHT = 20
+ATTRIBUTE_SECTION_HEIGHT = 25
+PLUS_BUTTON_SIZE = 20
+ATTRIBUTES_X = 10
+ATTRIBUTES_Y = SCREEN_HEIGHT - 250
 
 levels = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45])
 scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 787, 938, 1109, 1301, 1516, 1757, 2026, 2325, 2658, 3026, 3433, 3883, 4379, 4925, 5525, 6184, 6907, 7698, 8537, 9426, 10368, 11367, 12426, 13549, 14739, 16000, 17337, 18754, 20256, 21849, 23536])
@@ -63,8 +78,6 @@ OUTOFBOUNDSGRIDLINEGREY = (172, 172, 172)
 # Add these constants at the top of the file, after the other constants
 NORMAL_ZOOM = 1.0
 SNIPER_ZOOM = 0.7  # This will make everything appear 30% smaller, effectively increasing FOV
-UPGRADE_POINTS_PER_LEVEL = 1
-MAX_ATTRIBUTE_LEVEL = 7
 
 # Create the screen object
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
@@ -120,30 +133,48 @@ class Tank:
     def __init__(self, x, y, size, speed, color):
         self.world_x = x
         self.world_y = y
-        self.size = size
+        self.base_size = BASE_TANK_SIZE
+        self.size = self.base_size
         self.speed = speed
         self.angle = 0
         self.color = color
         self.bullets = []
         self.shoot_cooldown = 0
-        self.cannon_length = 75
-        self.cannon_thickness = 30
+        self.cannon_length = TILE_SIZE * 3  # 75 pixels
+        self.cannon_thickness = TILE_SIZE * 1.2  # 30 pixels
         self.health = 500
         self.max_health = 500
         self.alive = True
         self.barrel_recoil = [0]
-        self.max_barrel_recoil = 10
-        self.barrel_recoil_speed = 1
+        self.max_barrel_recoil = TILE_SIZE * 0.4  # 10 pixels
+        self.barrel_recoil_speed = TILE_SIZE * 0.04  # 1 pixel
         self.score = 500
         self.tank_type = "basic"
         self.recoil_velocity_x = 0
         self.recoil_velocity_y = 0
         self.recoil_dampening = 0.45
-        self.max_recoil_speed = 2
+        self.max_recoil_speed = TILE_SIZE * 0.08  # 2 pixels
         self.regen_rate = 0.1
         self.regen_cooldown = 0
         self.regen_cooldown_max = 180
         self.zoom = NORMAL_ZOOM
+
+    def adjust_dimensions(self):
+        """Adjust dimensions based on zoom level"""
+        self.size = int(self.base_size * self.zoom)
+        self.cannon_thickness = int(30 * self.zoom)
+        if self.tank_type == "sniper":
+            self.cannon_length = int(90 * self.zoom)
+        elif self.tank_type == "machine_gun":
+            self.cannon_length = int(70 * self.zoom)
+        elif self.tank_type == "twin":
+            self.cannon_length = int(80 * self.zoom)
+            self.cannon_separation = int(self.base_size * 1.0 * self.zoom)
+        elif self.tank_type == "flank":
+            self.front_cannon_length = int(75 * self.zoom)
+            self.back_cannon_length = int(60 * self.zoom)
+        else:
+            self.cannon_length = int(75 * self.zoom)
 
     def draw(self, screen):
         if not self.alive:
@@ -184,7 +215,7 @@ class Tank:
     def draw_health_bar(self, screen, screen_x, screen_y, drawn_size):
         if self.health < self.max_health:
             health_bar_width = drawn_size * 2
-            health_bar_height = int(5 * self.zoom)
+            health_bar_height = TILE_SIZE *0.2
             health_percentage = self.health / self.max_health
             health_bar_color = HEALTHBARGREEN
             pygame.draw.rect(screen, health_bar_color, (
@@ -323,11 +354,12 @@ class Enemy(Tank):
         Enemy.enemy_count += 1
         self.target = None
         self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
-        self.individual_score = 500  # Initial score
-        self.level = 1  # Add level tracking for enemies
+        self.individual_score = 500
+        self.level = 1
 
+        # Set up tank-specific attributes
         if self.tank_type == "twin":
-            self.cannon_separation = self.size * 1.0
+            self.cannon_separation = self.base_size * 1.0
             self.cannon_length = 80
             self.next_cannon = 1
             self.barrel_recoil = [0, 0]
@@ -346,6 +378,9 @@ class Enemy(Tank):
             self.cannon_thickness = 30
             self.barrel_recoil = [0]
             self.fire_rate = 2
+
+        # Apply initial dimension adjustment
+        self.adjust_dimensions()
 
     def update_level(self):
         """Update enemy level based on score, just like player"""
@@ -375,8 +410,7 @@ class Enemy(Tank):
         if not self.alive:
             return
 
-        # Early return if enemy is not visible
-        if not is_on_screen(self.world_x, self.world_y, self.size + self.cannon_length, tank):
+        if not is_on_screen(self.world_x, self.world_y, self.base_size + self.cannon_length, tank):
             return
 
         # Calculate screen position using the player's zoom factor
@@ -384,11 +418,11 @@ class Enemy(Tank):
         screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
         # Scale dimensions using the player's zoom
-        drawn_size = int(self.size * tank.zoom)
+        drawn_size = int(self.base_size * tank.zoom)
 
-        # Update cannon dimensions based on tank type
+        # Update cannon dimensions based on tank type and zoom
         if self.tank_type == "sniper":
-            drawn_cannon_length = int(90 * tank.zoom)  # Sniper has longer cannon
+            drawn_cannon_length = int(90 * tank.zoom)
             drawn_cannon_thickness = int(30 * tank.zoom)
         elif self.tank_type == "machine_gun":
             drawn_cannon_length = int(70 * tank.zoom)
@@ -396,7 +430,7 @@ class Enemy(Tank):
         elif self.tank_type == "twin":
             drawn_cannon_length = int(80 * tank.zoom)
             drawn_cannon_thickness = int(30 * tank.zoom)
-            self.cannon_separation = int(self.size * 1.0 * tank.zoom)
+            self.cannon_separation = int(self.base_size * 1.0 * tank.zoom)
         elif self.tank_type == "flank":
             self.front_cannon_length = int(75 * tank.zoom)
             self.back_cannon_length = int(60 * tank.zoom)
@@ -417,10 +451,8 @@ class Enemy(Tank):
         elif self.tank_type == "sniper":
             self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
-        # Draw enemy outline
+        # Draw enemy outline and body with scaled size
         pygame.draw.circle(screen, ENEMYOUTLINE, (screen_x, screen_y), drawn_size + int(4 * tank.zoom))
-
-        # Draw enemy body
         pygame.draw.circle(screen, self.color, (screen_x, screen_y), drawn_size)
 
         self.draw_health_bar(screen, screen_x, screen_y, drawn_size)
@@ -620,6 +652,38 @@ class Enemy(Tank):
 class Player(Tank):
     def __init__(self):
         super().__init__(WORLD_WIDTH // 2, WORLD_HEIGHT // 2, size=40, speed=5, color=AQUA)
+        self.attributes_surface = None
+        self.attributes_need_update = True
+        # Add attribute levels
+        self.attribute_levels = {
+            "Health Regen": 0,
+            "Max Health": 0,
+            "Body Damage": 0,
+            "Bullet Speed": 0,
+            "Bullet Penetration": 0,
+            "Bullet Damage": 0,
+            "Reload": 0,
+            "Movement Speed": 0
+        }
+        self.available_points = 0
+        self.max_attribute_level = 7
+        # Add base stats
+        self.base_stats = {
+            "Health Regen": 0.1,
+            "Max Health": 500,
+            "Body Damage": 5,
+            "Bullet Speed": 8,
+            "Bullet Penetration": 1,
+            "Bullet Damage": 25,
+            "Reload": 15,
+            "Movement Speed": 5
+        }
+
+        # Initialize derived stats
+        self.base_reload = self.base_stats["Reload"]
+
+        # Call update_stats to initialize all stats
+        self.update_stats()
         self.x = SCREEN_WIDTH // 2
         self.y = SCREEN_HEIGHT // 2
         self.autofire = False
@@ -634,15 +698,28 @@ class Player(Tank):
         self.level = 1
         self.score = 0
         self.upgrade_available = False
-        self.health_level = 0
-        self.bullet_damage_level = 0
-        self.bullet_speed_level = 0
-        self.bullet_penetration_level = 0
-        self.body_damage_level = 0
-        self.regen_level = 0
-        self.movement_speed_level = 0
-        self.reload_level = 0
-        self.available_upgrade_points = 0
+
+    def update_stats(self):
+        # Health Regen
+        self.regen_rate = self.base_stats["Health Regen"] * (1 + self.attribute_levels["Health Regen"] * 0.5)
+
+        # Max Health (20% increase per level)
+        self.max_health = self.base_stats["Max Health"] * (1 + self.attribute_levels["Max Health"] * 0.2)
+
+        # Body Damage (40% increase per level)
+        self.body_damage = self.base_stats["Body Damage"] * (1 + self.attribute_levels["Body Damage"] * 0.4)
+
+        # Bullet Speed (20% increase per level)
+        bullet_speed_multiplier = 1 + self.attribute_levels["Bullet Speed"] * 0.2
+
+        # Bullet Damage (40% increase per level)
+        self.bullet_damage = self.base_stats["Bullet Damage"] * (1 + self.attribute_levels["Bullet Damage"] * 0.4)
+
+        # Reload (15% decrease in cooldown per level)
+        self.base_reload = self.base_stats["Reload"] / (1 + self.attribute_levels["Reload"] * 0.15)
+
+        # Movement Speed (15% increase per level)
+        self.speed = self.base_stats["Movement Speed"] * (1 + self.attribute_levels["Movement Speed"] * 0.15)
 
     def upgrade_to_twin(self):
         self.tank_type = "twin"
@@ -670,55 +747,49 @@ class Player(Tank):
 
     def upgrade_to_sniper(self):
         self.tank_type = "sniper"
-        self.cannon_length = 90
+        self.zoom = SNIPER_ZOOM
+        self.cannon_length = TILE_SIZE * 3.6  # 90 pixels
+        self.cannon_thickness = TILE_SIZE * 1.2  # 30 pixels
         self.barrel_recoil = [0]
         self.fire_rate = 1
-        self.zoom = SNIPER_ZOOM  # Add this line
         self.upgrade_available = False
 
     def update_level(self):
         previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
-        if self.level > previous_level:
-            self.available_upgrade_points += UPGRADE_POINTS_PER_LEVEL * (self.level - previous_level)
 
-    def upgrade_attribute(self, attribute):
-        if self.available_upgrade_points > 0:
-            if attribute == "health" and self.health_level < MAX_ATTRIBUTE_LEVEL:
-                self.health_level += 1
-                self.max_health = 500 + (self.health_level * 50)
-                self.health = self.max_health
-                self.available_upgrade_points -= 1
-            elif attribute == "bullet_damage" and self.bullet_damage_level < MAX_ATTRIBUTE_LEVEL:
-                self.bullet_damage_level += 1
-                self.available_upgrade_points -= 1
-            elif attribute == "bullet_speed" and self.bullet_speed_level < MAX_ATTRIBUTE_LEVEL:
-                self.bullet_speed_level += 1
-                self.available_upgrade_points -= 1
-            elif attribute == "bullet_penetration" and self.bullet_penetration_level < MAX_ATTRIBUTE_LEVEL:
-                self.bullet_penetration_level += 1
-                self.available_upgrade_points -= 1
-            elif attribute == "body_damage" and self.body_damage_level < MAX_ATTRIBUTE_LEVEL:
-                self.body_damage_level += 1
-                self.available_upgrade_points -= 1
-            elif attribute == "regen" and self.regen_level < MAX_ATTRIBUTE_LEVEL:
-                self.regen_level += 1
-                self.regen_rate = 0.1 + (self.regen_level * 0.05)
-                self.available_upgrade_points -= 1
-            elif attribute == "movement_speed" and self.movement_speed_level < MAX_ATTRIBUTE_LEVEL:
-                self.movement_speed_level += 1
-                self.speed = 5 + (self.movement_speed_level * 0.3)
-                self.available_upgrade_points -= 1
-            elif attribute == "reload" and self.reload_level < MAX_ATTRIBUTE_LEVEL:
-                self.reload_level += 1
-                self.available_upgrade_points -= 1
+        # Calculate points to award based on level change
+        if self.level > previous_level:
+            for level in range(previous_level + 1, self.level + 1):
+                # Points from level 2-28 (27 points)
+                if level >= 2 and level <= 28:
+                    self.available_points += 1
+                # Point at level 30 (1 point)
+                elif level == 30:
+                    self.available_points += 1
+                # Points at levels 33, 36, 39, 42, 45 (5 points)
+                elif level > 30 and level <= 45 and (level - 30) % 3 == 0:
+                    self.available_points += 1
+
+            print(
+                f"Level up! Now level {self.level} with {self.available_points} upgrade points available")  # Debug message
 
     def level_up(self):
         if self.level < 45:
             previous_level = self.level
             self.level += 1
             self.score = scores[self.level - 1]
-            self.available_upgrade_points += UPGRADE_POINTS_PER_LEVEL
+
+            # Calculate points for this level up
+            if self.level >= 2 and self.level <= 28:
+                self.available_points += 1
+                self.attributes_need_update = True  # Mark for update
+            elif self.level == 30:
+                self.available_points += 1
+                self.attributes_need_update = True  # Mark for update
+            elif self.level > 30 and self.level <= 45 and (self.level - 30) % 3 == 0:
+                self.available_points += 1
+                self.attributes_need_update = True  # Mark for update
 
     def get_progress_to_next_level(self):
         if self.level >= len(levels):
@@ -777,32 +848,21 @@ class Player(Tank):
 
     def shoot(self):
         if self.shoot_cooldown <= 0:
-            base_cooldown = 15
-            if self.tank_type == "twin":
-                base_cooldown = 7.5
-            elif self.tank_type == "flank":
-                base_cooldown = 15
-            elif self.tank_type == "machine_gun":
-                base_cooldown = 7.5
-            elif self.tank_type == "sniper":
-                base_cooldown = 30
-
-            self.shoot_cooldown = base_cooldown * (1 - (self.reload_level * 0.08))  # Reduce cooldown with reload level
-
             if self.tank_type == "basic":
                 self.shoot_basic()
+                self.shoot_cooldown = self.base_reload
             elif self.tank_type == "twin":
                 self.shoot_twin()
+                self.shoot_cooldown = self.base_reload / 2
             elif self.tank_type == "flank":
                 self.shoot_flank()
+                self.shoot_cooldown = self.base_reload
             elif self.tank_type == "machine_gun":
                 self.shoot_machine_gun()
+                self.shoot_cooldown = self.base_reload / 2
             elif self.tank_type == "sniper":
                 self.shoot_sniper()
-            print(self.health)
-            recoil_force = 0.2
-            self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
-            self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
+                self.shoot_cooldown = self.base_reload * 2
 
     def shoot_basic(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
@@ -815,16 +875,6 @@ class Player(Tank):
             self.shoot_twin_alternate()
         else:
             self.shoot_twin_simultaneous()
-
-    def create_bullet(self, x, y, angle):
-        bullet_speed = 8 + (self.bullet_speed_level * 0.5)
-        if self.tank_type == "sniper":
-            bullet_speed = 12 + (self.bullet_speed_level * 0.5)
-        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 0)
-        bullet.damage = 25 + (self.bullet_damage_level * 5)  # Increase bullet damage
-        bullet.penetration = 1 + (self.bullet_penetration_level * 0.5)  # Add bullet penetration
-        bullet.owner = self
-        self.bullets.append(bullet)
 
     def shoot_twin_alternate(self):
         i = 1 if self.next_cannon == 1 else -1
@@ -899,7 +949,7 @@ class Player(Tank):
             distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
             if distance < self.size + enemy.size:
                 self.take_damage(5, "Enemy")
-                enemy.take_damage(5, self)
+                enemy.take_damage(self.body_damage, self)  # Use body_damage here
                 angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
                 push_distance = (self.size + enemy.size) - distance
                 self.world_x += math.cos(angle) * push_distance / 2
@@ -916,6 +966,32 @@ class Player(Tank):
         self.shoot_cooldown = 0
         self.regen_cooldown = 0
 
+        # Reset attribute points based on level when respawning
+        self.available_points = 0
+        self.attribute_levels = {
+            "Health Regen": 0,
+            "Max Health": 0,
+            "Body Damage": 0,
+            "Bullet Speed": 0,
+            "Bullet Penetration": 0,
+            "Bullet Damage": 0,
+            "Reload": 0,
+            "Movement Speed": 0
+        }
+
+        # Recalculate base_reload and other stats
+        self.base_reload = self.base_stats["Reload"]
+        self.update_stats()
+
+        # Recalculate points based on current level
+        for level in range(2, self.level + 1):
+            if level <= 28:
+                self.available_points += 1
+            elif level == 30:
+                self.available_points += 1
+            elif level > 30 and level <= 45 and (level - 30) % 3 == 0:
+                self.available_points += 1
+
     def add_score(self, points):
         self.score += points
         self.update_level()
@@ -929,7 +1005,8 @@ class Player(Tank):
                         point_y = self.world_y + math.sin(math.radians(angle)) * self.size
                         if shape.point_inside_polygon(point_x, point_y):
                             self.take_damage(5, shape)
-                            shape.take_damage(5, tankNum)
+                            # Pass self instead of tankNum
+                            shape.take_damage(5, self)
                             angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                             self.world_x += math.cos(angle) * 5
                             self.world_y += math.sin(angle) * 5
@@ -938,7 +1015,8 @@ class Player(Tank):
                     distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
                     if distance < self.size + shape.size // 2:
                         self.take_damage(5, shape)
-                        shape.take_damage(5, tankNum)
+                        # Pass self instead of tankNum
+                        shape.take_damage(5, self)
                         angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
                         push_distance = (self.size + shape.size // 2) - distance
                         self.world_x += math.cos(angle) * push_distance / 2
@@ -947,23 +1025,24 @@ class Player(Tank):
                         shape.world_y -= math.sin(angle) * push_distance / 2
 
 class Bullet:
-    def __init__(self, x, y, vel_x, vel_y, tankNum):
+    def __init__(self, x, y, vel_x, vel_y, tankNum, owner=None):
         self.world_x = x
         self.world_y = y
-        self.vel_x = vel_x
-        self.vel_y = vel_y
-        self.radius = 15
+        if owner and isinstance(owner, Player):
+            self.vel_x = vel_x
+            self.vel_y = vel_y
+            self.damage = owner.bullet_damage
+        else:
+            self.vel_x = vel_x
+            self.vel_y = vel_y
+            self.damage = 25 - (tankNum * 15)
+        self.base_radius = BASE_BULLET_SIZE
+        self.radius = self.base_radius
         self.lifespan = 200
-        self.damage = 25 - (tankNum * 15)
-        self.penetration = 1  # Add penetration attribute
         self.tankNum = tankNum
-        if tankNum == 0:
-            self.color = AQUA
-            self.bulletOutline = TANKOUTLINE
-        if tankNum == 1:
-            self.color = RED
-            self.bulletOutline = ENEMYOUTLINE
-        self.owner = None
+        self.color = AQUA if tankNum == 0 else RED
+        self.bulletOutline = TANKOUTLINE if tankNum == 0 else ENEMYOUTLINE
+        self.owner = owner
 
     def check_collision(self, shapes, attacker):
         for shape in shapes:
@@ -988,17 +1067,16 @@ class Bullet:
         self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
 
     def draw(self, tank):
-        # Early return if bullet is not visible
-        if not is_on_screen(self.world_x, self.world_y, self.radius * 2, tank):
+        if not is_on_screen(self.world_x, self.world_y, self.base_radius * 2, tank):
             return
-        # Calculate screen position using the player's zoom factor
+
         screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
         screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
-            drawn_radius = int(self.radius * tank.zoom)
+            drawn_radius = int(self.base_radius * tank.zoom)
             pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y),
-                             drawn_radius + int(4 * tank.zoom))
+                               drawn_radius + int(4 * tank.zoom))
             pygame.draw.circle(screen, self.color, (screen_x, screen_y), drawn_radius)
 
     def off_screen(self):
@@ -1077,7 +1155,7 @@ def initialize_enemies():
     return enemies
 
 class Shape:
-    def __init__(self, x, y, shape_type, tank, outline_thickness=4):
+    def __init__(self, x, y, shape_type, tank, outline_thickness=TILE_SIZE * 0.16):  # 4 pixels
         self.world_x = x
         self.world_y = y
         self.shape_type = shape_type
@@ -1085,21 +1163,25 @@ class Shape:
         self.rotation_speed = random.uniform(0.01, 0.03)
         self.rotation_direction = random.choice([-1, 1])
         self.points = []
-        self.outline_thickness = outline_thickness
+        self.base_outline_thickness = outline_thickness
         self.tank = tank
 
         if shape_type == "square":
-            self.size, self.health, self.max_health, self.color, self.outline_color = 40, 100, 100, SQUAREYELLOW, SQUAREOUTLINE
+            self.base_size = BASE_SQUARE_SIZE
         elif shape_type == "triangle":
-            self.size, self.health, self.max_health, self.color, self.outline_color = 60, 200, 200, TRIANGLERED, TRIANGLEOUTLINE
+            self.base_size = BASE_TRIANGLE_SIZE
         elif shape_type == "pentagon":
-            self.size, self.health, self.max_health, self.color, self.outline_color = 80, 300, 300, PENTAGONBLUE, PENTAGONOUTLINE
+            self.base_size = BASE_PENTAGON_SIZE
 
+        self.size = self.base_size
+        self.health = {"square": 100, "triangle": 200, "pentagon": 300}[shape_type]
+        self.max_health = self.health
+        self.color = {"square": SQUAREYELLOW, "triangle": TRIANGLERED, "pentagon": PENTAGONBLUE}[shape_type]
+        self.outline_color = {"square": SQUAREOUTLINE, "triangle": TRIANGLEOUTLINE, "pentagon": PENTAGONOUTLINE}[shape_type]
         self.alive = True
         self.update_points()
 
-        # Attributes for circular movement
-        self.orbit_radius = random.randint(25, 50)
+        self.orbit_radius = random.randint(TILE_SIZE, TILE_SIZE * 2)
         self.orbit_speed = random.uniform(0.005, 0.02)
         self.orbit_angle = random.uniform(0, 2 * math.pi)
         self.center_x = x
@@ -1107,9 +1189,9 @@ class Shape:
 
     def take_damage(self, damage, attacker):
         self.health -= damage
-        if self.health <= 0:
+        if self.health <= 0 and not isinstance(attacker, str):
             if isinstance(attacker, Player):
-                # Player destroyed the shape
+                # Player destroyed the shape (either by shooting or ramming)
                 if self.shape_type == "square":
                     attacker.add_score(10)
                 elif self.shape_type == "triangle":
@@ -1165,8 +1247,8 @@ class Shape:
         num_points = 5 if self.shape_type == "pentagon" else 4 if self.shape_type == "square" else 3
         for i in range(num_points):
             angle = self.angle + (math.pi * 2 * i / num_points)
-            point_x = self.world_x + math.cos(angle) * self.size // 2
-            point_y = self.world_y + math.sin(angle) * self.size // 2
+            point_x = self.world_x + math.cos(angle) * self.base_size // 2
+            point_y = self.world_y + math.sin(angle) * self.base_size // 2
             self.points.append((point_x, point_y))
 
     def check_collision(self, other):
@@ -1217,48 +1299,43 @@ class Shape:
         if not self.alive:
             return
 
-        # Early return if shape is not visible
-        if not is_on_screen(self.world_x, self.world_y, self.size, tank):
+        if not is_on_screen(self.world_x, self.world_y, self.base_size, tank):
             return
 
-        # Calculate screen position using the player's zoom factor
         screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
         screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
-        # Scale points based on zoom
+        scaled_size = int(self.base_size * tank.zoom)
+        self.size = scaled_size  # Update size for collision detection
+
         screen_points = [
             (int((x - tank.world_x) * tank.zoom + tank.x),
              int((y - tank.world_y) * tank.zoom + tank.y))
             for x, y in self.points
         ]
 
-        # Draw the filled shape
         pygame.draw.polygon(screen, self.color, screen_points)
-
-        # Draw the outline with adjustable thickness
         pygame.draw.polygon(screen, self.outline_color, screen_points,
-                            max(1, int(self.outline_thickness * tank.zoom)))
+                          max(1, int(self.base_outline_thickness * tank.zoom)))
 
-        # Draw health bar only if health is below max
         if self.health < self.max_health:
-            health_bar_width = int(self.size * tank.zoom)
-            health_bar_height = int(5 * tank.zoom)
+            health_bar_width = self.base_size * tank.zoom
+            health_bar_height = TILE_SIZE * 0.2
             health_percentage = self.health / self.max_health
-            health_bar_color = HEALTHBARGREEN
 
-            pygame.draw.rect(screen, health_bar_color, (
+            pygame.draw.rect(screen, HEALTHBARGREEN, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + (self.size // 2) * tank.zoom + 5 * tank.zoom),
+                int(screen_y + (self.base_size * tank.zoom // 2) + TILE_SIZE * 0.2 * tank.zoom),
                 int(health_bar_width * health_percentage),
-                health_bar_height
+                int(health_bar_height)
             ))
 
             pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + (self.size // 2) * tank.zoom + 5 * tank.zoom),
-                health_bar_width,
-                health_bar_height
-            ), max(1, int(tank.zoom)))
+                int(screen_y + (self.base_size * tank.zoom // 2) + TILE_SIZE * 0.2 * tank.zoom),
+                int(health_bar_width),
+                int(health_bar_height)
+            ), max(1, int(TILE_SIZE * 0.04 * tank.zoom)))  # 1 pixel outline relative to grid
 
 def draw_upgrade_buttons(screen, tank):
     if tank.level >= 15 and tank.tank_type == "basic":
@@ -1294,6 +1371,101 @@ def handle_upgrade_click(tank, mouse_pos):
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
     return False
 
+def handle_attribute_upgrade(player, mouse_pos):
+    if player.available_points <= 0:
+        return False
+
+    # Adjust mouse position to be relative to the attributes surface
+    relative_y = mouse_pos[1] - (ATTRIBUTES_Y - 50)
+    relative_x = mouse_pos[0] - ATTRIBUTES_X
+
+    y = 50  # Start below points indicator
+    for attribute, level in player.attribute_levels.items():
+        if level < player.max_attribute_level:
+            button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
+            button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
+
+            if (button_rect.collidepoint(relative_x, relative_y)):
+                player.attribute_levels[attribute] += 1
+                player.available_points -= 1
+                player.update_stats()
+                player.attributes_need_update = True
+                update_attribute_surface(player)  # Immediately update the surface
+                return True
+
+        y += ATTRIBUTE_SECTION_HEIGHT
+    return False
+
+def create_attributes_surface(player):
+    # Create a surface for attributes display
+    ATTRIBUTES_SURFACE_WIDTH = ATTRIBUTE_BAR_WIDTH + 200  # Adjust as needed
+    ATTRIBUTES_SURFACE_HEIGHT = 300  # Adjust as needed
+    surface = pygame.Surface((ATTRIBUTES_SURFACE_WIDTH, ATTRIBUTES_SURFACE_HEIGHT), pygame.SRCALPHA)
+    surface.fill((0, 0, 0, 0))  # Make surface transparent
+
+    # Draw available points indicator
+    if player.available_points > 0:
+        font = pygame.font.SysFont(None, 36)
+        points_text = f"Upgrade Points: {player.available_points}"
+        text_surface = font.render(points_text, True, RED)
+        points_rect = text_surface.get_rect(topleft=(0, 0))
+        surface.blit(text_surface, points_rect)
+
+    # Draw attribute bars
+    font = pygame.font.SysFont(None, 24)
+    y = 50  # Start below points indicator
+
+    for attribute, level in player.attribute_levels.items():
+        # Draw attribute name
+        name_surface = font.render(attribute, True, BLACK)
+        surface.blit(name_surface, (0, y))
+
+        # Draw level bar background
+        bar_rect = pygame.Rect(150, y, ATTRIBUTE_BAR_WIDTH, ATTRIBUTE_BAR_HEIGHT)
+        pygame.draw.rect(surface, GRAY, bar_rect)
+
+        # Draw filled portion of bar - fixed this part
+        if level > 0:
+            filled_width = int((ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * level)
+            filled_rect = pygame.Rect(150, y, filled_width, ATTRIBUTE_BAR_HEIGHT)
+            pygame.draw.rect(surface, GREEN, filled_rect)
+
+        # Draw bar segments
+        for i in range(player.max_attribute_level):
+            segment_x = 150 + (ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * i
+            pygame.draw.line(surface, BLACK,
+                           (segment_x, y),
+                           (segment_x, y + ATTRIBUTE_BAR_HEIGHT))
+
+        # Draw plus button if upgrades available
+        if player.available_points > 0 and level < player.max_attribute_level:
+            button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
+            button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
+            pygame.draw.rect(surface, GREEN, button_rect)
+            pygame.draw.rect(surface, BLACK, button_rect, 2)
+
+            plus_font = pygame.font.SysFont(None, 30)
+            plus_text = plus_font.render("+", True, BLACK)
+            plus_rect = plus_text.get_rect(center=button_rect.center)
+            surface.blit(plus_text, plus_rect)
+
+        y += ATTRIBUTE_SECTION_HEIGHT
+
+    return surface
+
+def update_attribute_surface(player):
+    # Update the cached surface only when needed
+    player.attributes_surface = create_attributes_surface(player)
+    player.attributes_need_update = False
+
+def draw_attributes(screen, player):
+    # Create initial surface if it doesn't exist
+    if not hasattr(player, 'attributes_surface') or player.attributes_need_update:
+        update_attribute_surface(player)
+
+    # Draw the cached surface
+    screen.blit(player.attributes_surface, (ATTRIBUTES_X, ATTRIBUTES_Y - 50))
+
 def draw_score(screen, score):
     font = pygame.font.SysFont(None, 36)
     score_text = font.render(f"Score: {score}", True, BLACK)
@@ -1318,14 +1490,17 @@ def draw_autospin_indicator(tank):
 # Draw the grid-based terrain
 def draw_grid(tank):
     scaled_tile_size = int(TILE_SIZE * tank.zoom)
-    cols = SCREEN_WIDTH // scaled_tile_size + 2
-    rows = SCREEN_HEIGHT // scaled_tile_size + 2
+    visible_width = int(SCREEN_WIDTH / tank.zoom)
+    visible_height = int(SCREEN_HEIGHT / tank.zoom)
 
-    offset_x = ((tank.world_x - tank.x) * tank.zoom) % scaled_tile_size
-    offset_y = ((tank.world_y - tank.y) * tank.zoom) % scaled_tile_size
+    cols = visible_width // TILE_SIZE + 2
+    rows = visible_height // TILE_SIZE + 2
 
-    start_world_x = tank.world_x - tank.x
-    start_world_y = tank.world_y - tank.y
+    offset_x = ((tank.world_x - tank.x / tank.zoom) % TILE_SIZE) * tank.zoom
+    offset_y = ((tank.world_y - tank.y / tank.zoom) % TILE_SIZE) * tank.zoom
+
+    start_world_x = tank.world_x - tank.x / tank.zoom
+    start_world_y = tank.world_y - tank.y / tank.zoom
 
     for row in range(rows):
         for col in range(cols):
@@ -1337,74 +1512,12 @@ def draw_grid(tank):
 
             if (0 <= world_tile_x < WORLD_WIDTH and 0 <= world_tile_y < WORLD_HEIGHT):
                 pygame.draw.rect(screen, GRIDLINEGREY,
-                               (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
+                                 (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
             else:
                 pygame.draw.rect(screen, OUTOFBOUNDSCREENGREY,
-                               (tile_x, tile_y, scaled_tile_size, scaled_tile_size))
+                                 (tile_x, tile_y, scaled_tile_size, scaled_tile_size))
                 pygame.draw.rect(screen, OUTOFBOUNDSGRIDLINEGREY,
-                               (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
-
-
-def draw_attribute_upgrades(screen, tank):
-    if tank.available_upgrade_points > 0:
-        font = pygame.font.SysFont(None, 24)
-        attributes = [
-            ("Health", tank.health_level),
-            ("Bullet Damage", tank.bullet_damage_level),
-            ("Bullet Speed", tank.bullet_speed_level),
-            ("Bullet Penetration", tank.bullet_penetration_level),
-            ("Body Damage", tank.body_damage_level),
-            ("Regeneration", tank.regen_level),
-            ("Movement Speed", tank.movement_speed_level),
-            ("Reload", tank.reload_level)
-        ]
-
-        upgrade_x = SCREEN_WIDTH - 180
-        upgrade_y = 350
-        button_height = 30
-        button_width = 160
-
-        # Draw available points
-        points_text = f"Upgrade Points: {tank.available_upgrade_points}"
-        text_surface = font.render(points_text, True, BLACK)
-        screen.blit(text_surface, (upgrade_x, upgrade_y - 30))
-
-        for i, (attr, level) in enumerate(attributes):
-            y_pos = upgrade_y + (i * (button_height + 5))
-
-            # Draw attribute name and level
-            text = f"{attr}: {level}/7"
-            text_surface = font.render(text, True, BLACK)
-            screen.blit(text_surface, (upgrade_x, y_pos))
-
-            # Draw upgrade button if not maxed
-            if level < MAX_ATTRIBUTE_LEVEL:
-                button_rect = pygame.Rect(upgrade_x + button_width - 20, y_pos, 20, button_height)
-                pygame.draw.rect(screen, WHITE, button_rect)
-                pygame.draw.rect(screen, BLACK, button_rect, 1)
-                plus_text = font.render("+", True, BLACK)
-                plus_rect = plus_text.get_rect(center=button_rect.center)
-                screen.blit(plus_text, plus_rect)
-
-
-def handle_attribute_upgrade_click(tank, pos):
-    if tank.available_upgrade_points <= 0:
-        return
-
-    upgrade_x = SCREEN_WIDTH - 180
-    upgrade_y = 350
-    button_height = 30
-    button_width = 160
-
-    attributes = ["health", "bullet_damage", "bullet_speed", "bullet_penetration",
-                  "body_damage", "regen", "movement_speed", "reload"]
-
-    for i, attr in enumerate(attributes):
-        button_rect = pygame.Rect(upgrade_x + button_width - 20,
-                                  upgrade_y + (i * (button_height + 5)), 20, button_height)
-        if button_rect.collidepoint(pos):
-            tank.upgrade_attribute(attr)
-            return
+                                 (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
 
 def format_time(seconds):
     minutes, seconds = divmod(int(seconds), 60)
@@ -1774,10 +1887,12 @@ def game_loop():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and not game_over:
-                if event.button == 1:  # Left mouse button
-                    if handle_upgrade_click(player, event.pos):
+                if player.shoot_cooldown <= 0:
+                    player.shoot()
+                if event.button == 1:
+                    if handle_attribute_upgrade(player, event.pos):
                         continue
-                    if handle_attribute_upgrade_click(player, event.pos):
+                    if handle_upgrade_click(player, event.pos):
                         continue
                     if player.shoot_cooldown <= 0:
                         player.shoot()
@@ -1792,9 +1907,6 @@ def game_loop():
                     minimap_mode = (minimap_mode + 1) % 5
                 elif event.key == pygame.K_l:
                     leaderboard_visible = not leaderboard_visible
-            #elif event.type == pygame.MOUSEBUTTONDOWN:
-             #   handle_attribute_upgrade_click(player, event.pos)
-
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_k]:
@@ -1880,11 +1992,11 @@ def game_loop():
                                     enemy.bullets.remove(bullet)
 
         # Drawing
+
         draw_grid(player)
         draw_score(screen, player.score)
         draw_level_info(screen, player)
-        draw_attribute_upgrades(screen, player)
-
+        draw_attributes(screen, player)
 
         for shape in shapes:
             shape.draw(player)
