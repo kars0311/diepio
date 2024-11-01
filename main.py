@@ -11,14 +11,29 @@ pygame.init()
 SCREEN_WIDTH, SCREEN_HEIGHT = 1425, 900 #1440/780
 WORLD_WIDTH, WORLD_HEIGHT = 5000, 5000
 TILE_SIZE = 25
+BASE_TANK_SIZE = TILE_SIZE * 1.6  # 40 pixels
+BASE_BULLET_SIZE = TILE_SIZE * 0.6  # 15 pixels
+BASE_SQUARE_SIZE = TILE_SIZE * 1.6  # 40 pixels
+BASE_TRIANGLE_SIZE = TILE_SIZE * 2.4  # 60 pixels
+BASE_PENTAGON_SIZE = TILE_SIZE * 3.2  # 80 pixels
+NORMAL_ZOOM = 1.0
+SNIPER_ZOOM = 0.85
 
 # Add these constants at the top of your file
 UPGRADE_BUTTON_WIDTH = 150
 UPGRADE_BUTTON_HEIGHT = 40
 UPGRADE_BUTTON_MARGIN = 10
 
+# attribute constants
+ATTRIBUTE_BAR_WIDTH = 200
+ATTRIBUTE_BAR_HEIGHT = 20
+ATTRIBUTE_SECTION_HEIGHT = 25
+PLUS_BUTTON_SIZE = 20
+ATTRIBUTES_X = 10
+ATTRIBUTES_Y = SCREEN_HEIGHT - 250
+
 levels = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45])
-scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 7870, 9380, 11090, 13010, 15160, 17570, 20260, 23250, 26580, 30260, 34330, 38830, 43790, 49250, 55250, 61840, 69070, 76980, 85370, 94260, 103680, 113670, 124260, 135490, 147390, 160000, 173370, 187540, 202560, 218490, 235360])
+scores = np.array([0, 4, 13, 28, 50, 78, 113, 157, 211, 275, 350, 437, 538, 655, 787, 938, 1109, 1301, 1516, 1757, 2026, 2325, 2658, 3026, 3433, 3883, 4379, 4925, 5525, 6184, 6907, 7698, 8537, 9426, 10368, 11367, 12426, 13549, 14739, 16000, 17337, 18754, 20256, 21849, 23536])
 
 # Minimap visibility
 minimap_visible = True  # Start with the minimap visible by default
@@ -60,12 +75,30 @@ TANKOUTLINE = (3, 133, 168)
 OUTOFBOUNDSCREENGREY = (183, 183, 183)
 OUTOFBOUNDSGRIDLINEGREY = (172, 172, 172)
 
+# Add these constants at the top of the file, after the other constants
+NORMAL_ZOOM = 1.0
+SNIPER_ZOOM = 0.7  # This will make everything appear 30% smaller, effectively increasing FOV
+
 # Create the screen object
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Diep.io")
 
 # Clock object to control game speed
 clock = pygame.time.Clock()
+
+
+def is_on_screen(world_x, world_y, size, tank):
+    """Helper function to check if an object is visible on screen"""
+    # Calculate screen coordinates
+    screen_x = (world_x - tank.world_x) * tank.zoom + tank.x
+    screen_y = (world_y - tank.world_y) * tank.zoom + tank.y
+
+    # Add padding equal to the object's size
+    padding = size * tank.zoom
+
+    # Check if object is within screen bounds (with padding)
+    return (-padding <= screen_x <= SCREEN_WIDTH + padding and
+            -padding <= screen_y <= SCREEN_HEIGHT + padding)
 
 def draw_menu(screen, clock):
     menu_font = pygame.font.Font(None, 74)
@@ -100,79 +133,176 @@ class Tank:
     def __init__(self, x, y, size, speed, color):
         self.world_x = x
         self.world_y = y
-        self.size = size
+        self.base_size = BASE_TANK_SIZE
+        self.size = self.base_size
         self.speed = speed
         self.angle = 0
         self.color = color
         self.bullets = []
         self.shoot_cooldown = 0
-        self.cannon_length = 75
-        self.cannon_thickness = 30
+        self.cannon_length = TILE_SIZE * 3  # 75 pixels
+        self.cannon_thickness = TILE_SIZE * 1.2  # 30 pixels
         self.health = 500
         self.max_health = 500
         self.alive = True
         self.barrel_recoil = [0]
-        self.max_barrel_recoil = 10
-        self.barrel_recoil_speed = 1
+        self.max_barrel_recoil = TILE_SIZE * 0.4  # 10 pixels
+        self.barrel_recoil_speed = TILE_SIZE * 0.04  # 1 pixel
         self.score = 500
         self.tank_type = "basic"
         self.recoil_velocity_x = 0
         self.recoil_velocity_y = 0
         self.recoil_dampening = 0.45
-        self.max_recoil_speed = 2
+        self.max_recoil_speed = TILE_SIZE * 0.08  # 2 pixels
         self.regen_rate = 0.1
         self.regen_cooldown = 0
         self.regen_cooldown_max = 180
+        self.zoom = NORMAL_ZOOM
+
+    def adjust_dimensions(self):
+        """Adjust dimensions based on zoom level"""
+        self.size = int(self.base_size * self.zoom)
+        self.cannon_thickness = int(30 * self.zoom)
+        if self.tank_type == "sniper":
+            self.cannon_length = int(90 * self.zoom)
+        elif self.tank_type == "machine_gun":
+            self.cannon_length = int(70 * self.zoom)
+        elif self.tank_type == "twin":
+            self.cannon_length = int(80 * self.zoom)
+            self.cannon_separation = int(self.base_size * 1.0 * self.zoom)
+        elif self.tank_type == "flank":
+            self.front_cannon_length = int(75 * self.zoom)
+            self.back_cannon_length = int(60 * self.zoom)
+        else:
+            self.cannon_length = int(75 * self.zoom)
 
     def draw(self, screen):
         if not self.alive:
             return
 
+        # Calculate screen position
         screen_x = self.world_x - self.world_x + self.x
         screen_y = self.world_y - self.world_y + self.y
 
+        # Early return if tank is not visible
+        if not is_on_screen(self.world_x, self.world_y, self.size + self.cannon_length, self):
+            return
+
+        # Scale sizes based on zoom
+        drawn_size = int(self.size * self.zoom)
+        drawn_cannon_length = int(self.cannon_length * self.zoom)
+        drawn_cannon_thickness = int(self.cannon_thickness * self.zoom)
+
         if self.tank_type == "basic":
-            self.draw_basic_cannon(screen, screen_x, screen_y)
+            self.draw_basic_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "twin":
-            self.draw_twin_cannons(screen, screen_x, screen_y)
+            self.draw_twin_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "flank":
-            self.draw_flank_cannons(screen, screen_x, screen_y)
+            self.draw_flank_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "machine_gun":
-            self.draw_machine_gun_cannon(screen, screen_x, screen_y)
+            self.draw_machine_gun_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "sniper":
-            self.draw_sniper_cannon(screen, screen_x, screen_y)
+            self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
         # Draw tank outline
-        pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
+        pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
 
         # Draw tank body
-        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
+        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), drawn_size)
 
-        self.draw_health_bar(screen, screen_x, screen_y)
+        self.draw_health_bar(screen, screen_x, screen_y, drawn_size)
 
-    def draw_health_bar(self, screen, screen_x, screen_y):
+    def draw_health_bar(self, screen, screen_x, screen_y, drawn_size):
         if self.health < self.max_health:
-            health_bar_width = self.size * 2
-            health_bar_height = 5
+            health_bar_width = drawn_size * 2
+            health_bar_height = TILE_SIZE *0.2
             health_percentage = self.health / self.max_health
             health_bar_color = HEALTHBARGREEN
             pygame.draw.rect(screen, health_bar_color, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size + 5),
+                int(screen_y + drawn_size + 5 * self.zoom),
                 int(health_bar_width * health_percentage),
                 health_bar_height
             ))
             pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size + 5),
+                int(screen_y + drawn_size + 5 * self.zoom),
                 health_bar_width,
                 health_bar_height
-            ), 1)
+            ), max(1, int(self.zoom)))
 
-    def draw_cannon(self, screen, start_x, start_y, end_x, end_y):
+    def draw_basic_cannon(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[0] * self.zoom)
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
+
+    def draw_twin_cannons(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        for i in [-1, 1]:
+            recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[(i + 1) // 2] * self.zoom)
+            cannon_separation = self.cannon_separation * self.zoom
+            cannon_start_x = screen_x + i * math.cos(self.angle + math.pi / 2) * cannon_separation / 2
+            cannon_start_y = screen_y + i * math.sin(self.angle + math.pi / 2) * cannon_separation / 2
+            cannon_start_x -= math.cos(self.angle) * (self.size * 0.1 * self.zoom)
+            cannon_start_y -= math.sin(self.angle) * (self.size * 0.1 * self.zoom)
+            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+            self.draw_cannon(screen, cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
+
+    def draw_flank_cannons(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        # Front cannon
+        front_recoil_adjusted_length = (self.front_cannon_length * self.zoom) - (self.barrel_recoil[0] * self.zoom)
+        front_cannon_end_x = screen_x + math.cos(self.angle) * front_recoil_adjusted_length
+        front_cannon_end_y = screen_y + math.sin(self.angle) * front_recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, front_cannon_end_x, front_cannon_end_y, drawn_cannon_thickness)
+
+        # Back cannon
+        back_angle = self.angle + math.pi
+        back_recoil_adjusted_length = (self.back_cannon_length * self.zoom) - (self.barrel_recoil[1] * self.zoom)
+        back_cannon_end_x = screen_x + math.cos(back_angle) * back_recoil_adjusted_length
+        back_cannon_end_y = screen_y + math.sin(back_angle) * back_recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, back_cannon_end_x, back_cannon_end_y, drawn_cannon_thickness)
+
+    def draw_machine_gun_cannon(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[0] * self.zoom)
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+
+        base_width = drawn_cannon_thickness * 0.75
+        tip_width = drawn_cannon_thickness * 1
+
+        perpendicular_angle = self.angle + math.pi / 2
+        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
+        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
+        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
+        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
+
+        cannon_corners = [
+            (screen_x + base_offset_x, screen_y + base_offset_y),
+            (screen_x - base_offset_x, screen_y - base_offset_y),
+            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
+            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        ]
+
+        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
+
+        outline_thickness = max(1, int(3 * self.zoom))
+        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
+
+        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
+        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
+
+    def draw_sniper_cannon(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[0] * self.zoom)
+        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
+        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
+        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
+
+    def draw_cannon(self, screen, start_x, start_y, end_x, end_y, drawn_thickness):
         perpendicular_angle = math.atan2(end_y - start_y, end_x - start_x) + math.pi / 2
-        half_thickness = self.cannon_thickness / 2
-        outline_thickness = 3
+        half_thickness = drawn_thickness / 2
+        outline_thickness = max(1, int(3 * self.zoom))
 
         outline_offset_x = math.cos(perpendicular_angle) * (half_thickness + outline_thickness)
         outline_offset_y = math.sin(perpendicular_angle) * (half_thickness + outline_thickness)
@@ -200,76 +330,12 @@ class Tank:
         end_line_end = (end_x + outline_offset_x, end_y + outline_offset_y)
         pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
 
-    def draw_basic_cannon(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y)
-
-    def draw_twin_cannons(self, screen, screen_x, screen_y):
-        for i in [-1, 1]:
-            recoil_adjusted_length = self.cannon_length - self.barrel_recoil[(i + 1) // 2]
-            cannon_start_x = screen_x + i * math.cos(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_y = screen_y + i * math.sin(self.angle + math.pi / 2) * self.cannon_separation / 2
-            cannon_start_x -= math.cos(self.angle) * self.size * 0.1
-            cannon_start_y -= math.sin(self.angle) * self.size * 0.1
-            cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
-            cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
-            self.draw_cannon(screen, cannon_start_x, cannon_start_y, cannon_end_x, cannon_end_y)
-
-    def draw_flank_cannons(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.front_cannon_length - self.barrel_recoil[0]
-        front_cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        front_cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, front_cannon_end_x, front_cannon_end_y)
-
-        back_angle = self.angle + math.pi
-        recoil_adjusted_length = self.back_cannon_length - self.barrel_recoil[1]
-        back_cannon_end_x = screen_x + math.cos(back_angle) * recoil_adjusted_length
-        back_cannon_end_y = screen_y + math.sin(back_angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, back_cannon_end_x, back_cannon_end_y)
-
-    def draw_machine_gun_cannon(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-
-        base_width = self.cannon_thickness * 0.75
-        tip_width = self.cannon_thickness * 1
-
-        perpendicular_angle = self.angle + math.pi / 2
-        base_offset_x = math.cos(perpendicular_angle) * base_width / 2
-        base_offset_y = math.sin(perpendicular_angle) * base_width / 2
-        tip_offset_x = math.cos(perpendicular_angle) * tip_width / 2
-        tip_offset_y = math.sin(perpendicular_angle) * tip_width / 2
-
-        cannon_corners = [
-            (screen_x + base_offset_x, screen_y + base_offset_y),
-            (screen_x - base_offset_x, screen_y - base_offset_y),
-            (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y),
-            (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        ]
-
-        pygame.draw.polygon(screen, CANNONGREY, cannon_corners)
-
-        outline_thickness = 3
-        pygame.draw.lines(screen, CANNONOUTLINEGREY, True, cannon_corners, outline_thickness)
-
-        end_line_start = (cannon_end_x - tip_offset_x, cannon_end_y - tip_offset_y)
-        end_line_end = (cannon_end_x + tip_offset_x, cannon_end_y + tip_offset_y)
-        pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
-
-    def draw_sniper_cannon(self, screen, screen_x, screen_y):
-        recoil_adjusted_length = self.cannon_length - self.barrel_recoil[0]
-        cannon_end_x = screen_x + math.cos(self.angle) * recoil_adjusted_length
-        cannon_end_y = screen_y + math.sin(self.angle) * recoil_adjusted_length
-        self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y)
-
     def create_bullet(self, x, y, angle):
         bullet_speed = 8
         if self.tank_type == "sniper":
             bullet_speed = 12
         bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1 if isinstance(self, Enemy) else 0)
+        bullet.owner = self  # Set the owner reference
         self.bullets.append(bullet)
 
     def take_damage(self, damage, attacker=None):
@@ -279,41 +345,21 @@ class Tank:
             self.alive = False
         return self.alive
 
-    def check_collision_with_shapes(self, shapes):
-        for shape in shapes:
-            if shape.alive:
-                if shape.shape_type == "pentagon":
-                    for angle in range(0, 360, 30):
-                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
-                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
-                        if shape.point_inside_polygon(point_x, point_y):
-                            self.take_damage(5, shape)
-                            shape.take_damage(5)
-                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                            self.world_x += math.cos(angle) * 5
-                            self.world_y += math.sin(angle) * 5
-                            break
-                else:
-                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-                    if distance < self.size + shape.size // 2:
-                        self.take_damage(5, shape)
-                        shape.take_damage(5)
-                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
-                        push_distance = (self.size + shape.size // 2) - distance
-                        self.world_x += math.cos(angle) * push_distance / 2
-                        self.world_y += math.sin(angle) * push_distance / 2
-                        shape.world_x -= math.cos(angle) * push_distance / 2
-                        shape.world_y -= math.sin(angle) * push_distance / 2
-
 # Subclass for Enemy
 class Enemy(Tank):
+    enemy_count = 0  # Class variable to keep track of total enemies created
     def __init__(self, x, y):
         super().__init__(x, y, size=40, speed=3, color=RED)
+        self.enemy_index = Enemy.enemy_count
+        Enemy.enemy_count += 1
         self.target = None
         self.tank_type = random.choice(["basic", "twin", "flank", "machine_gun", "sniper"])
-        self.score = 500
+        self.individual_score = 500
+        self.level = 1
+
+        # Set up tank-specific attributes
         if self.tank_type == "twin":
-            self.cannon_separation = self.size * 1.0
+            self.cannon_separation = self.base_size * 1.0
             self.cannon_length = 80
             self.next_cannon = 1
             self.barrel_recoil = [0, 0]
@@ -333,31 +379,83 @@ class Enemy(Tank):
             self.barrel_recoil = [0]
             self.fire_rate = 2
 
+        # Apply initial dimension adjustment
+        self.adjust_dimensions()
+
+    def update_level(self):
+        """Update enemy level based on score, just like player"""
+        self.level = np.searchsorted(scores, self.individual_score, side='right')
+
+    def regenerate(self, tank):
+        while True:
+            self.world_x = random.randint(50, WORLD_WIDTH - 50)
+            self.world_y = random.randint(50, WORLD_HEIGHT - 50)
+            distance = math.sqrt((self.world_x - tank.world_x) ** 2 + (self.world_y - tank.world_y) ** 2)
+            if distance > 1000:
+                break
+        self.health = self.max_health
+        self.alive = True
+
+        # Update level before resetting score
+        self.update_level()
+        # Reset score to half of current level's score, just like player
+        halfscore = scores[self.level // 2] if self.level > 1 else 500
+        self.individual_score = halfscore
+
+    def add_score(self, points):
+        self.individual_score += points
+        self.update_level()  # Update level when score changes
+
     def draw(self, tank):
         if not self.alive:
             return
 
-        screen_x = self.world_x - tank.world_x + tank.x
-        screen_y = self.world_y - tank.world_y + tank.y
+        if not is_on_screen(self.world_x, self.world_y, self.base_size + self.cannon_length, tank):
+            return
+
+        # Calculate screen position using the player's zoom factor
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
+
+        # Scale dimensions using the player's zoom
+        drawn_size = int(self.base_size * tank.zoom)
+
+        # Update cannon dimensions based on tank type and zoom
+        if self.tank_type == "sniper":
+            drawn_cannon_length = int(90 * tank.zoom)
+            drawn_cannon_thickness = int(30 * tank.zoom)
+        elif self.tank_type == "machine_gun":
+            drawn_cannon_length = int(70 * tank.zoom)
+            drawn_cannon_thickness = int(50 * tank.zoom)
+        elif self.tank_type == "twin":
+            drawn_cannon_length = int(80 * tank.zoom)
+            drawn_cannon_thickness = int(30 * tank.zoom)
+            self.cannon_separation = int(self.base_size * 1.0 * tank.zoom)
+        elif self.tank_type == "flank":
+            self.front_cannon_length = int(75 * tank.zoom)
+            self.back_cannon_length = int(60 * tank.zoom)
+            drawn_cannon_length = self.front_cannon_length
+            drawn_cannon_thickness = int(30 * tank.zoom)
+        else:  # basic tank
+            drawn_cannon_length = int(75 * tank.zoom)
+            drawn_cannon_thickness = int(30 * tank.zoom)
 
         if self.tank_type == "basic":
-            self.draw_basic_cannon(screen, screen_x, screen_y)
+            self.draw_basic_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "twin":
-            self.draw_twin_cannons(screen, screen_x, screen_y)
+            self.draw_twin_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "flank":
-            self.draw_flank_cannons(screen, screen_x, screen_y)
+            self.draw_flank_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "machine_gun":
-            self.draw_machine_gun_cannon(screen, screen_x, screen_y)
+            self.draw_machine_gun_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "sniper":
-            self.draw_sniper_cannon(screen, screen_x, screen_y)
+            self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
-        # Draw enemy outline
-        pygame.draw.circle(screen, ENEMYOUTLINE, (int(screen_x), int(screen_y)), self.size + 4)
+        # Draw enemy outline and body with scaled size
+        pygame.draw.circle(screen, ENEMYOUTLINE, (screen_x, screen_y), drawn_size + int(4 * tank.zoom))
+        pygame.draw.circle(screen, self.color, (screen_x, screen_y), drawn_size)
 
-        # Draw enemy body
-        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), self.size)
-
-        self.draw_health_bar(screen, screen_x, screen_y)
+        self.draw_health_bar(screen, screen_x, screen_y, drawn_size)
 
     def update(self, tank, shapes):
         if not self.alive:
@@ -407,7 +505,7 @@ class Enemy(Tank):
             if self.barrel_recoil[i] > 0:
                 self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
 
-        self.check_collision_with_shapes(shapes)
+        self.check_collision_with_shapes(shapes, 1)
 
     def target_player(self, tank):
         self.target = (tank.world_x, tank.world_y)
@@ -504,20 +602,13 @@ class Enemy(Tank):
         super().take_damage(damage)
         if self.health <= 0:
             if isinstance(tank, Player):
-                tank.add_score(4 * self.score // 5)
+                # Give score based on this enemy's individual score
+                if self.individual_score < 23536:
+                    tank.add_score(self.individual_score)
+                else:
+                    tank.add_score(23536)
             self.regenerate(tank)
         return self.alive
-
-    def regenerate(self, tank):
-        while True:
-            self.world_x = random.randint(50, WORLD_WIDTH - 50)
-            self.world_y = random.randint(50, WORLD_HEIGHT - 50)
-            distance = math.sqrt((self.world_x - tank.world_x) ** 2 + (self.world_y - tank.world_y) ** 2)
-            if distance > 1000:
-                break
-        self.health = self.max_health
-        self.alive = True
-        self.score = 500
 
     def check_collision_with_enemies(self, enemies):
         for enemy in enemies:
@@ -531,10 +622,66 @@ class Enemy(Tank):
                     enemy.world_x -= math.cos(angle) * push_distance / 2
                     enemy.world_y -= math.sin(angle) * push_distance / 2
 
+    def check_collision_with_shapes(self, shapes, tankNum):
+        for shape in shapes:
+            if shape.alive:
+                if shape.shape_type == "pentagon":
+                    for angle in range(0, 360, 30):
+                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
+                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
+                        if shape.point_inside_polygon(point_x, point_y):
+                            self.take_damage(5, shape)
+                            shape.take_damage(5, tankNum)
+                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                            self.world_x += math.cos(angle) * 5
+                            self.world_y += math.sin(angle) * 5
+                            break
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.size + shape.size // 2:
+                        self.take_damage(5, shape)
+                        shape.take_damage(5, self)  # Pass the enemy instance instead of tankNum
+                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                        push_distance = (self.size + shape.size // 2) - distance
+                        self.world_x += math.cos(angle) * push_distance / 2
+                        self.world_y += math.sin(angle) * push_distance / 2
+                        shape.world_x -= math.cos(angle) * push_distance / 2
+                        shape.world_y -= math.sin(angle) * push_distance / 2
+
 # Subclass for Player
 class Player(Tank):
     def __init__(self):
         super().__init__(WORLD_WIDTH // 2, WORLD_HEIGHT // 2, size=40, speed=5, color=AQUA)
+        # Add attribute levels
+        self.attribute_levels = {
+            "Health Regen": 0,
+            "Max Health": 0,
+            "Body Damage": 0,
+            "Bullet Speed": 0,
+            "Bullet Penetration": 0,
+            "Bullet Damage": 0,
+            "Reload": 0,
+            "Movement Speed": 0
+        }
+        self.available_points = 0
+        self.max_attribute_level = 7
+        # Add base stats
+        self.base_stats = {
+            "Health Regen": 0.1,
+            "Max Health": 500,
+            "Body Damage": 5,
+            "Bullet Speed": 8,
+            "Bullet Penetration": 1,
+            "Bullet Damage": 25,
+            "Reload": 15,
+            "Movement Speed": 5
+        }
+
+        # Initialize derived stats
+        self.base_reload = self.base_stats["Reload"]
+
+        # Call update_stats to initialize all stats
+        self.update_stats()
         self.x = SCREEN_WIDTH // 2
         self.y = SCREEN_HEIGHT // 2
         self.autofire = False
@@ -549,6 +696,28 @@ class Player(Tank):
         self.level = 1
         self.score = 0
         self.upgrade_available = False
+
+    def update_stats(self):
+        # Health Regen
+        self.regen_rate = self.base_stats["Health Regen"] * (1 + self.attribute_levels["Health Regen"] * 0.5)
+
+        # Max Health (20% increase per level)
+        self.max_health = self.base_stats["Max Health"] * (1 + self.attribute_levels["Max Health"] * 0.2)
+
+        # Body Damage (40% increase per level)
+        self.body_damage = self.base_stats["Body Damage"] * (1 + self.attribute_levels["Body Damage"] * 0.4)
+
+        # Bullet Speed (20% increase per level)
+        bullet_speed_multiplier = 1 + self.attribute_levels["Bullet Speed"] * 0.2
+
+        # Bullet Damage (40% increase per level)
+        self.bullet_damage = self.base_stats["Bullet Damage"] * (1 + self.attribute_levels["Bullet Damage"] * 0.4)
+
+        # Reload (15% decrease in cooldown per level)
+        self.base_reload = self.base_stats["Reload"] / (1 + self.attribute_levels["Reload"] * 0.15)
+
+        # Movement Speed (15% increase per level)
+        self.speed = self.base_stats["Movement Speed"] * (1 + self.attribute_levels["Movement Speed"] * 0.15)
 
     def upgrade_to_twin(self):
         self.tank_type = "twin"
@@ -576,7 +745,9 @@ class Player(Tank):
 
     def upgrade_to_sniper(self):
         self.tank_type = "sniper"
-        self.cannon_length = 90
+        self.zoom = SNIPER_ZOOM
+        self.cannon_length = TILE_SIZE * 3.6  # 90 pixels
+        self.cannon_thickness = TILE_SIZE * 1.2  # 30 pixels
         self.barrel_recoil = [0]
         self.fire_rate = 1
         self.upgrade_available = False
@@ -585,10 +756,35 @@ class Player(Tank):
         previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
 
+        # Calculate points to award based on level change
+        if self.level > previous_level:
+            for level in range(previous_level + 1, self.level + 1):
+                # Points from level 2-28 (27 points)
+                if level >= 2 and level <= 28:
+                    self.available_points += 1
+                # Point at level 30 (1 point)
+                elif level == 30:
+                    self.available_points += 1
+                # Points at levels 33, 36, 39, 42, 45 (5 points)
+                elif level > 30 and level <= 45 and (level - 30) % 3 == 0:
+                    self.available_points += 1
+
+            print(
+                f"Level up! Now level {self.level} with {self.available_points} upgrade points available")  # Debug message
+
     def level_up(self):
         if self.level < 45:
+            previous_level = self.level  # Store previous level
             self.level += 1
             self.score = scores[self.level - 1]
+
+            # Calculate points for this level up
+            if self.level >= 2 and self.level <= 28:
+                self.available_points += 1
+            elif self.level == 30:
+                self.available_points += 1
+            elif self.level > 30 and self.level <= 45 and (self.level - 30) % 3 == 0:
+                self.available_points += 1
 
     def get_progress_to_next_level(self):
         if self.level >= len(levels):
@@ -649,23 +845,19 @@ class Player(Tank):
         if self.shoot_cooldown <= 0:
             if self.tank_type == "basic":
                 self.shoot_basic()
-                self.shoot_cooldown = 15
+                self.shoot_cooldown = self.base_reload
             elif self.tank_type == "twin":
                 self.shoot_twin()
-                self.shoot_cooldown = 7.5
+                self.shoot_cooldown = self.base_reload / 2
             elif self.tank_type == "flank":
                 self.shoot_flank()
-                self.shoot_cooldown = 15
+                self.shoot_cooldown = self.base_reload
             elif self.tank_type == "machine_gun":
                 self.shoot_machine_gun()
-                self.shoot_cooldown = 7.5
+                self.shoot_cooldown = self.base_reload / 2
             elif self.tank_type == "sniper":
                 self.shoot_sniper()
-                self.shoot_cooldown = 30
-
-            recoil_force = 0.2
-            self.recoil_velocity_x -= math.cos(self.angle) * recoil_force
-            self.recoil_velocity_y -= math.sin(self.angle) * recoil_force
+                self.shoot_cooldown = self.base_reload * 2
 
     def shoot_basic(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
@@ -752,7 +944,7 @@ class Player(Tank):
             distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
             if distance < self.size + enemy.size:
                 self.take_damage(5, "Enemy")
-                enemy.take_damage(5, self)
+                enemy.take_damage(self.body_damage, self)  # Use body_damage here
                 angle = math.atan2(self.world_y - enemy.world_y, self.world_x - enemy.world_x)
                 push_distance = (self.size + enemy.size) - distance
                 self.world_x += math.cos(angle) * push_distance / 2
@@ -769,26 +961,97 @@ class Player(Tank):
         self.shoot_cooldown = 0
         self.regen_cooldown = 0
 
+        # Reset attribute points based on level when respawning
+        self.available_points = 0
+        self.attribute_levels = {
+            "Health Regen": 0,
+            "Max Health": 0,
+            "Body Damage": 0,
+            "Bullet Speed": 0,
+            "Bullet Penetration": 0,
+            "Bullet Damage": 0,
+            "Reload": 0,
+            "Movement Speed": 0
+        }
+
+        # Recalculate base_reload and other stats
+        self.base_reload = self.base_stats["Reload"]
+        self.update_stats()
+
+        # Recalculate points based on current level
+        for level in range(2, self.level + 1):
+            if level <= 28:
+                self.available_points += 1
+            elif level == 30:
+                self.available_points += 1
+            elif level > 30 and level <= 45 and (level - 30) % 3 == 0:
+                self.available_points += 1
+
     def add_score(self, points):
         self.score += points
         self.update_level()
 
+    def check_collision_with_shapes(self, shapes, tankNum):
+        for shape in shapes:
+            if shape.alive:
+                if shape.shape_type == "pentagon":
+                    for angle in range(0, 360, 30):
+                        point_x = self.world_x + math.cos(math.radians(angle)) * self.size
+                        point_y = self.world_y + math.sin(math.radians(angle)) * self.size
+                        if shape.point_inside_polygon(point_x, point_y):
+                            self.take_damage(5, shape)
+                            # Pass self instead of tankNum
+                            shape.take_damage(5, self)
+                            angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                            self.world_x += math.cos(angle) * 5
+                            self.world_y += math.sin(angle) * 5
+                            break
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.size + shape.size // 2:
+                        self.take_damage(5, shape)
+                        # Pass self instead of tankNum
+                        shape.take_damage(5, self)
+                        angle = math.atan2(self.world_y - shape.world_y, self.world_x - shape.world_x)
+                        push_distance = (self.size + shape.size // 2) - distance
+                        self.world_x += math.cos(angle) * push_distance / 2
+                        self.world_y += math.sin(angle) * push_distance / 2
+                        shape.world_x -= math.cos(angle) * push_distance / 2
+                        shape.world_y -= math.sin(angle) * push_distance / 2
+
 class Bullet:
-    def __init__(self, x, y, vel_x, vel_y, tankNum):
+    def __init__(self, x, y, vel_x, vel_y, tankNum, owner=None):
         self.world_x = x
         self.world_y = y
-        self.vel_x = vel_x
-        self.vel_y = vel_y
-        self.radius = 15
+        if owner and isinstance(owner, Player):
+            self.vel_x = vel_x
+            self.vel_y = vel_y
+            self.damage = owner.bullet_damage
+        else:
+            self.vel_x = vel_x
+            self.vel_y = vel_y
+            self.damage = 25 - (tankNum * 15)
+        self.base_radius = BASE_BULLET_SIZE
+        self.radius = self.base_radius
         self.lifespan = 200
-        self.damage = 25 - (tankNum * 15)
-        self.tankNum = tankNum  # 0 for player, 1 for enemy
-        if tankNum == 0:
-            self.color = AQUA
-            self.bulletOutline = TANKOUTLINE
-        if tankNum == 1:
-            self.color = RED
-            self.bulletOutline = ENEMYOUTLINE
+        self.tankNum = tankNum
+        self.color = AQUA if tankNum == 0 else RED
+        self.bulletOutline = TANKOUTLINE if tankNum == 0 else ENEMYOUTLINE
+        self.owner = owner
+
+    def check_collision(self, shapes, attacker):
+        for shape in shapes:
+            if shape.alive:
+                if shape.shape_type == "pentagon":
+                    if shape.point_inside_polygon(self.world_x, self.world_y):
+                        shape.take_damage(self.damage, attacker)
+                        return True
+                else:
+                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                    if distance < self.radius + shape.size // 2:
+                        shape.take_damage(self.damage, attacker)
+                        return True
+        return False
 
     def update(self):
         self.world_x += self.vel_x
@@ -799,31 +1062,22 @@ class Bullet:
         self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
 
     def draw(self, tank):
-        screen_x = int(self.world_x - tank.world_x + tank.x)
-        screen_y = int(self.world_y - tank.world_y + tank.y)
+        if not is_on_screen(self.world_x, self.world_y, self.base_radius * 2, tank):
+            return
+
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
-            pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y), self.radius + 4)
-            pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.radius)
+            drawn_radius = int(self.base_radius * tank.zoom)
+            pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y),
+                               drawn_radius + int(4 * tank.zoom))
+            pygame.draw.circle(screen, self.color, (screen_x, screen_y), drawn_radius)
 
     def off_screen(self):
         return (self.world_x < self.radius or self.world_x > WORLD_WIDTH - self.radius or
                 self.world_y < self.radius or self.world_y > WORLD_HEIGHT - self.radius or
                 self.lifespan <= 0)
-
-    def check_collision(self, shapes, tank):
-        for shape in shapes:
-            if shape.alive:
-                if shape.shape_type == "pentagon":
-                    if shape.point_inside_polygon(self.world_x, self.world_y):
-                        shape.take_damage(self.damage)
-                        return True
-                else:
-                    distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
-                    if distance < self.radius + shape.size // 2:
-                        shape.take_damage(self.damage)
-                        return True
-        return False
 
     def check_collision_with_enemies(self, enemies, tank):
         for enemy in enemies:
@@ -867,18 +1121,27 @@ class BulletCollisionEffect:
         self.alpha = max(0, self.alpha - self.fade_rate)
 
     def draw(self, tank):
-        screen_x = int(self.world_x - tank.world_x + tank.x)
-        screen_y = int(self.world_y - tank.world_y + tank.y)
+        # Early return if effect is not visible
+        if not is_on_screen(self.world_x, self.world_y, self.radius * 2, tank):
+            return
+
+        # Calculate screen position using tank's zoom factor
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
+
+        # Scale radius with zoom factor
+        drawn_radius = int(self.radius * tank.zoom)
 
         if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
-            surface = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(surface, (*self.color, self.alpha), (self.radius, self.radius), self.radius)
-            screen.blit(surface, (screen_x - self.radius, screen_y - self.radius))
+            surface = pygame.Surface((drawn_radius * 2, drawn_radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(surface, (*self.color, self.alpha), (drawn_radius, drawn_radius), drawn_radius)
+            screen.blit(surface, (screen_x - drawn_radius, screen_y - drawn_radius))
 
     def is_finished(self):
         return self.alpha <= 0
 
 def initialize_enemies():
+    Enemy.enemy_count = 0  # Reset the enemy count before creating new enemies
     enemies = []
     for _ in range(5):
         x = random.randint(100, WORLD_WIDTH - 100)
@@ -887,7 +1150,7 @@ def initialize_enemies():
     return enemies
 
 class Shape:
-    def __init__(self, x, y, shape_type, tank, outline_thickness=4):
+    def __init__(self, x, y, shape_type, tank, outline_thickness=TILE_SIZE * 0.16):  # 4 pixels
         self.world_x = x
         self.world_y = y
         self.shape_type = shape_type
@@ -895,25 +1158,59 @@ class Shape:
         self.rotation_speed = random.uniform(0.01, 0.03)
         self.rotation_direction = random.choice([-1, 1])
         self.points = []
-        self.outline_thickness = outline_thickness  # New attribute for outline thickness
-        self.tank = tank  # Store the tank object
+        self.base_outline_thickness = outline_thickness
+        self.tank = tank
 
         if shape_type == "square":
-            self.size, self.health, self.max_health, self.color, self.outline_color = 40, 100, 100, SQUAREYELLOW, SQUAREOUTLINE
+            self.base_size = BASE_SQUARE_SIZE
         elif shape_type == "triangle":
-            self.size, self.health, self.max_health, self.color, self.outline_color = 60, 200, 200, TRIANGLERED, TRIANGLEOUTLINE
+            self.base_size = BASE_TRIANGLE_SIZE
         elif shape_type == "pentagon":
-            self.size, self.health, self.max_health, self.color, self.outline_color = 80, 300, 300, PENTAGONBLUE, PENTAGONOUTLINE
+            self.base_size = BASE_PENTAGON_SIZE
 
+        self.size = self.base_size
+        self.health = {"square": 100, "triangle": 200, "pentagon": 300}[shape_type]
+        self.max_health = self.health
+        self.color = {"square": SQUAREYELLOW, "triangle": TRIANGLERED, "pentagon": PENTAGONBLUE}[shape_type]
+        self.outline_color = {"square": SQUAREOUTLINE, "triangle": TRIANGLEOUTLINE, "pentagon": PENTAGONOUTLINE}[shape_type]
         self.alive = True
         self.update_points()
 
-        # New attributes for perpetual circular movement
-        self.orbit_radius = random.randint(25, 50)
+        self.orbit_radius = random.randint(TILE_SIZE, TILE_SIZE * 2)
         self.orbit_speed = random.uniform(0.005, 0.02)
         self.orbit_angle = random.uniform(0, 2 * math.pi)
         self.center_x = x
         self.center_y = y
+
+    def take_damage(self, damage, attacker):
+        self.health -= damage
+        if self.health <= 0 and not isinstance(attacker, str):
+            if isinstance(attacker, Player):
+                # Player destroyed the shape (either by shooting or ramming)
+                if self.shape_type == "square":
+                    attacker.add_score(10)
+                elif self.shape_type == "triangle":
+                    attacker.add_score(25)
+                elif self.shape_type == "pentagon":
+                    attacker.add_score(130)
+            elif isinstance(attacker, Enemy):
+                # Enemy destroyed the shape
+                if self.shape_type == "square":
+                    attacker.add_score(10)
+                elif self.shape_type == "triangle":
+                    attacker.add_score(25)
+                elif self.shape_type == "pentagon":
+                    attacker.add_score(130)
+            self.regenerate()
+
+    def regenerate(self):
+        self.world_x = random.randint(100, WORLD_WIDTH - 100)
+        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
+        self.center_x = self.world_x
+        self.center_y = self.world_y
+        self.health = self.max_health
+        self.alive = True
+        self.orbit_angle = random.uniform(0, 2 * math.pi)
 
     def update(self, shapes):
         if not self.alive:
@@ -935,17 +1232,18 @@ class Shape:
 
         # Check for collisions with other shapes
         for other in shapes:
-            if other != self and other.alive:
-                if self.check_collision(other):
-                    self.resolve_collision(other)
+            if (other.world_x-self.world_x)<100 and (other.world_x-self.world_x)>-100 and (other.world_y-self.world_y)<100 and (other.world_y-self.world_y)>-100:
+                if other != self and other.alive:
+                    if self.check_collision(other):
+                        self.resolve_collision(other)
 
     def update_points(self):
         self.points = []
         num_points = 5 if self.shape_type == "pentagon" else 4 if self.shape_type == "square" else 3
         for i in range(num_points):
             angle = self.angle + (math.pi * 2 * i / num_points)
-            point_x = self.world_x + math.cos(angle) * self.size // 2
-            point_y = self.world_y + math.sin(angle) * self.size // 2
+            point_x = self.world_x + math.cos(angle) * self.base_size // 2
+            point_y = self.world_y + math.sin(angle) * self.base_size // 2
             self.points.append((point_x, point_y))
 
     def check_collision(self, other):
@@ -973,26 +1271,6 @@ class Shape:
         other.center_x = other.world_x - math.cos(other.orbit_angle) * other.orbit_radius
         other.center_y = other.world_y - math.sin(other.orbit_angle) * other.orbit_radius
 
-    def take_damage(self, damage):
-        self.health -= damage
-        if self.health <= 0:
-            if self.shape_type == "square":
-                self.tank.add_score(10)
-            elif self.shape_type == "triangle":
-                self.tank.add_score(25)
-            elif self.shape_type == "pentagon":
-                self.tank.add_score(130)
-            self.regenerate()
-
-    def regenerate(self):
-        self.world_x = random.randint(100, WORLD_WIDTH - 100)
-        self.world_y = random.randint(100, WORLD_HEIGHT - 100)
-        self.center_x = self.world_x
-        self.center_y = self.world_y
-        self.health = self.max_health
-        self.alive = True
-        self.orbit_angle = random.uniform(0, 2 * math.pi)
-
     def point_inside_polygon(self, x, y):
         if self.shape_type != "pentagon":
             return False  # Only pentagons use this method
@@ -1016,35 +1294,43 @@ class Shape:
         if not self.alive:
             return
 
-        screen_x = self.world_x - tank.world_x + tank.x
-        screen_y = self.world_y - tank.world_y + tank.y
+        if not is_on_screen(self.world_x, self.world_y, self.base_size, tank):
+            return
 
-        screen_points = [(x - tank.world_x + tank.x, y - tank.world_y + tank.y) for x, y in self.points]
+        screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
+        screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
-        # Draw the filled shape
+        scaled_size = int(self.base_size * tank.zoom)
+        self.size = scaled_size  # Update size for collision detection
+
+        screen_points = [
+            (int((x - tank.world_x) * tank.zoom + tank.x),
+             int((y - tank.world_y) * tank.zoom + tank.y))
+            for x, y in self.points
+        ]
+
         pygame.draw.polygon(screen, self.color, screen_points)
+        pygame.draw.polygon(screen, self.outline_color, screen_points,
+                          max(1, int(self.base_outline_thickness * tank.zoom)))
 
-        # Draw the outline with adjustable thickness
-        pygame.draw.polygon(screen, self.outline_color, screen_points, self.outline_thickness)
-
-        # Draw health bar only if health is below max
         if self.health < self.max_health:
-            health_bar_width = self.size
-            health_bar_height = 5
+            health_bar_width = self.base_size * tank.zoom
+            health_bar_height = TILE_SIZE * 0.2
             health_percentage = self.health / self.max_health
-            health_bar_color = HEALTHBARGREEN
-            pygame.draw.rect(screen, health_bar_color, (
+
+            pygame.draw.rect(screen, HEALTHBARGREEN, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size // 2 + 5),
+                int(screen_y + (self.base_size * tank.zoom // 2) + TILE_SIZE * 0.2 * tank.zoom),
                 int(health_bar_width * health_percentage),
-                health_bar_height
+                int(health_bar_height)
             ))
+
             pygame.draw.rect(screen, HEALTHBAROUTLINE, (
                 int(screen_x - health_bar_width // 2),
-                int(screen_y + self.size // 2 + 5),
-                health_bar_width,
-                health_bar_height
-            ), 1)
+                int(screen_y + (self.base_size * tank.zoom // 2) + TILE_SIZE * 0.2 * tank.zoom),
+                int(health_bar_width),
+                int(health_bar_height)
+            ), max(1, int(TILE_SIZE * 0.04 * tank.zoom)))  # 1 pixel outline relative to grid
 
 def draw_upgrade_buttons(screen, tank):
     if tank.level >= 15 and tank.tank_type == "basic":
@@ -1080,6 +1366,82 @@ def handle_upgrade_click(tank, mouse_pos):
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
     return False
 
+def draw_attributes(screen, player):
+    # Draw available points indicator - made larger and more visible
+    if player.available_points > 0:
+        font = pygame.font.SysFont(None, 36)  # Larger font
+        points_text = f"Upgrade Points: {player.available_points}"
+        text_surface = font.render(points_text, True, RED)  # Changed to red for visibility
+        points_rect = text_surface.get_rect(topleft=(ATTRIBUTES_X, ATTRIBUTES_Y - 50))
+        screen.blit(text_surface, points_rect)
+
+    # Draw attribute bars
+    font = pygame.font.SysFont(None, 24)  # Slightly larger font for attributes
+    y = ATTRIBUTES_Y
+
+    for attribute, level in player.attribute_levels.items():
+        # Draw attribute name
+        name_surface = font.render(attribute, True, BLACK)
+        screen.blit(name_surface, (ATTRIBUTES_X, y))
+
+        # Draw level bar background
+        bar_rect = pygame.Rect(ATTRIBUTES_X + 150, y, ATTRIBUTE_BAR_WIDTH, ATTRIBUTE_BAR_HEIGHT)
+        pygame.draw.rect(screen, GRAY, bar_rect)
+
+        # Draw filled portion of bar
+        if level > 0:
+            filled_width = (ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * level
+            filled_rect = pygame.Rect(ATTRIBUTES_X + 150, y, filled_width, ATTRIBUTE_BAR_HEIGHT)
+            pygame.draw.rect(screen, GREEN, filled_rect)
+
+        # Draw bar segments
+        for i in range(player.max_attribute_level):
+            segment_x = ATTRIBUTES_X + 150 + (ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * i
+            pygame.draw.line(screen, BLACK,
+                             (segment_x, y),
+                             (segment_x, y + ATTRIBUTE_BAR_HEIGHT))
+
+        # Draw plus button (made more visible)
+        if player.available_points > 0 and level < player.max_attribute_level:
+            button_x = ATTRIBUTES_X + 150 + ATTRIBUTE_BAR_WIDTH + 10
+            button_y = y
+            button_rect = pygame.Rect(button_x, button_y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
+
+            # Draw button background
+            pygame.draw.rect(screen, GREEN, button_rect)
+            # Draw button border
+            pygame.draw.rect(screen, BLACK, button_rect, 2)
+
+            # Draw plus symbol
+            plus_font = pygame.font.SysFont(None, 30)
+            plus_text = plus_font.render("+", True, BLACK)
+            plus_rect = plus_text.get_rect(center=button_rect.center)
+            screen.blit(plus_text, plus_rect)
+
+            # Debug rectangle to show clickable area
+            pygame.draw.rect(screen, BLACK, button_rect, 1)
+
+        y += ATTRIBUTE_SECTION_HEIGHT
+
+def handle_attribute_upgrade(player, mouse_pos):
+    if player.available_points <= 0:
+        return False
+
+    y = ATTRIBUTES_Y
+    for attribute, level in player.attribute_levels.items():
+        if level < player.max_attribute_level:
+            button_x = ATTRIBUTES_X + 150 + ATTRIBUTE_BAR_WIDTH + 10
+            button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
+
+            if button_rect.collidepoint(mouse_pos):
+                player.attribute_levels[attribute] += 1
+                player.available_points -= 1
+                player.update_stats()  # Add this line to update stats when points are spent
+                return True
+
+        y += ATTRIBUTE_SECTION_HEIGHT
+    return False
+
 def draw_score(screen, score):
     font = pygame.font.SysFont(None, 36)
     score_text = font.render(f"Score: {score}", True, BLACK)
@@ -1103,37 +1465,35 @@ def draw_autospin_indicator(tank):
 
 # Draw the grid-based terrain
 def draw_grid(tank):
-    cols = SCREEN_WIDTH // TILE_SIZE + 2  # Number of tiles needed to fill the width
-    rows = SCREEN_HEIGHT // TILE_SIZE + 2  # Number of tiles needed to fill the height
+    scaled_tile_size = int(TILE_SIZE * tank.zoom)
+    visible_width = int(SCREEN_WIDTH / tank.zoom)
+    visible_height = int(SCREEN_HEIGHT / tank.zoom)
 
-    # Calculate the offset based on the player's world position and movement
-    offset_x = (tank.world_x - tank.x) % TILE_SIZE
-    offset_y = (tank.world_y - tank.y) % TILE_SIZE
+    cols = visible_width // TILE_SIZE + 2
+    rows = visible_height // TILE_SIZE + 2
 
-    # Calculate the starting world coordinates of the visible area
-    start_world_x = tank.world_x - tank.x
-    start_world_y = tank.world_y - tank.y
+    offset_x = ((tank.world_x - tank.x / tank.zoom) % TILE_SIZE) * tank.zoom
+    offset_y = ((tank.world_y - tank.y / tank.zoom) % TILE_SIZE) * tank.zoom
 
-    # Loop through rows and columns and draw tiles
+    start_world_x = tank.world_x - tank.x / tank.zoom
+    start_world_y = tank.world_y - tank.y / tank.zoom
+
     for row in range(rows):
         for col in range(cols):
-            # Calculate tile position in screen coordinates
-            tile_x = col * TILE_SIZE - offset_x
-            tile_y = row * TILE_SIZE - offset_y
+            tile_x = col * scaled_tile_size - offset_x
+            tile_y = row * scaled_tile_size - offset_y
 
-            # Calculate the world coordinates of this tile
             world_tile_x = start_world_x + col * TILE_SIZE
             world_tile_y = start_world_y + row * TILE_SIZE
 
-            # Check if the tile is within the world bounds
             if (0 <= world_tile_x < WORLD_WIDTH and 0 <= world_tile_y < WORLD_HEIGHT):
-                # Draw the normal grid tile
-                pygame.draw.rect(screen, GRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+                pygame.draw.rect(screen, GRIDLINEGREY,
+                                 (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
             else:
-                # Fill the out-of-bounds tile
-                pygame.draw.rect(screen, OUTOFBOUNDSCREENGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE))
-                # Draw the grid lines for out-of-bounds tiles
-                pygame.draw.rect(screen, OUTOFBOUNDSGRIDLINEGREY, (tile_x, tile_y, TILE_SIZE, TILE_SIZE), 1)
+                pygame.draw.rect(screen, OUTOFBOUNDSCREENGREY,
+                                 (tile_x, tile_y, scaled_tile_size, scaled_tile_size))
+                pygame.draw.rect(screen, OUTOFBOUNDSGRIDLINEGREY,
+                                 (tile_x, tile_y, scaled_tile_size, scaled_tile_size), 1)
 
 def format_time(seconds):
     minutes, seconds = divmod(int(seconds), 60)
@@ -1305,6 +1665,173 @@ def draw_level_info(screen, tank):
     progress_rect.midleft = (bar_x + bar_width + 10, bar_y + bar_height // 2)
     screen.blit(progress_text, progress_rect)
 
+
+def draw_leaderboard_tank(screen, x, y, tank_type, color, angle=0, scale=0.4):
+    size = int(20 * scale)
+    cannon_length = int(35 * scale)
+    cannon_width = int(12 * scale)
+
+    # Draw cannon(s) first, before the tank body
+    if tank_type == "twin":
+        offset = int(size * 0.3)
+        for offset_y in [-offset, offset]:
+            points = [
+                (x - cannon_width // 2, y + offset_y),
+                (x - cannon_width // 2, y + offset_y),
+                (x + cannon_length, y + offset_y),
+                (x + cannon_length, y + offset_y)
+            ]
+            pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y + offset_y), (x + cannon_length, y + offset_y),
+                             cannon_width + 2)
+            pygame.draw.line(screen, CANNONGREY, (x, y + offset_y), (x + cannon_length, y + offset_y), cannon_width)
+    elif tank_type == "flank":
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x + cannon_length, y), cannon_width + 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x + cannon_length, y), cannon_width)
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x - cannon_length * 0.8, y), cannon_width + 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x - cannon_length * 0.8, y), cannon_width)
+    elif tank_type == "machine_gun":
+        points = [
+            (x - cannon_width // 2, y),
+            (x + cannon_length, y - cannon_width),
+            (x + cannon_length, y + cannon_width),
+        ]
+        pygame.draw.polygon(screen, CANNONOUTLINEGREY, points, 3)
+        pygame.draw.polygon(screen, CANNONGREY, points)
+    elif tank_type == "sniper":
+        # REPLACE THESE TWO LINES
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x + cannon_length * 1.2, y), cannon_width - 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x + cannon_length * 1.2, y), cannon_width - 4)
+        # WITH THESE TWO LINES
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x + cannon_length * 1.2, y), cannon_width)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x + cannon_length * 1.2, y), cannon_width - 2)
+    else:  # basic tank
+        pygame.draw.line(screen, CANNONOUTLINEGREY, (x, y), (x + cannon_length, y), cannon_width + 2)
+        pygame.draw.line(screen, CANNONGREY, (x, y), (x + cannon_length, y), cannon_width)
+
+    # Draw tank body and outline after the cannons
+    outline_color = TANKOUTLINE if color == AQUA else ENEMYOUTLINE
+    pygame.draw.circle(screen, outline_color, (x, y), size + 2)
+    pygame.draw.circle(screen, color, (x, y), size)
+
+
+def create_leaderboard_surface():
+    # Constants for leaderboard
+    LEADERBOARD_WIDTH = 250
+    LEADERBOARD_HEIGHT = 300
+    ENTRY_HEIGHT = 50
+    PADDING = 10
+
+    # Create static font objects
+    font_title = pygame.font.SysFont(None, 36)
+    font_entry = pygame.font.SysFont(None, 24)
+
+    # Create the surface
+    leaderboard_surface = pygame.Surface((LEADERBOARD_WIDTH, LEADERBOARD_HEIGHT), pygame.SRCALPHA)
+
+    # Store important values in a dictionary for reuse
+    return {
+        'surface': leaderboard_surface,
+        'width': LEADERBOARD_WIDTH,
+        'height': LEADERBOARD_HEIGHT,
+        'entry_height': ENTRY_HEIGHT,
+        'padding': PADDING,
+        'font_title': font_title,
+        'font_entry': font_entry,
+        'last_update': 0,
+        'update_interval': 500,  # Update every 500ms
+        'cached_scores': None
+    }
+
+
+def update_leaderboard_surface(leaderboard_info, player, enemies, current_time):
+    # Check if it's time to update
+    if (current_time - leaderboard_info['last_update'] < leaderboard_info['update_interval'] and
+            leaderboard_info['cached_scores'] is not None):
+        return False
+
+    # Create list of all tanks and their scores
+    scores_list = [{
+        'score': player.score,
+        'tank_type': player.tank_type,
+        'color': player.color,
+        'isPlayer': True
+    }]
+
+    scores_list.extend([{
+        'score': enemy.individual_score,
+        'tank_type': enemy.tank_type,
+        'color': enemy.color,
+        'isPlayer': False
+    } for enemy in enemies if enemy.alive])
+
+    # Sort by score
+    scores_list.sort(key=lambda x: x['score'], reverse=True)
+
+    # If scores haven't changed, don't update
+    if scores_list == leaderboard_info['cached_scores']:
+        return False
+
+    leaderboard_info['cached_scores'] = scores_list
+    leaderboard_info['last_update'] = current_time
+
+    # Clear the surface
+    leaderboard_info['surface'].fill((255, 255, 255, 180))
+
+    # Draw title
+    title_surface = leaderboard_info['font_title'].render("Leaderboard", True, BLACK)
+    title_rect = title_surface.get_rect(
+        centerx=leaderboard_info['width'] // 2,
+        y=leaderboard_info['padding']
+    )
+    leaderboard_info['surface'].blit(title_surface, title_rect)
+
+    # Draw entries
+    for i, entry in enumerate(scores_list):
+        y_pos = title_rect.height + leaderboard_info['padding'] * 2 + (i * leaderboard_info['entry_height'])
+
+        # Draw rank
+        rank_surface = leaderboard_info['font_entry'].render(f"#{i + 1}", True, BLACK)
+        leaderboard_info['surface'].blit(rank_surface,
+                                         (leaderboard_info['padding'], y_pos + leaderboard_info['entry_height'] // 4))
+
+        # Draw tank
+        tank_x = leaderboard_info['padding'] * 8
+        tank_y = y_pos + leaderboard_info['entry_height'] // 2
+        draw_leaderboard_tank(leaderboard_info['surface'], tank_x, tank_y,
+                              entry['tank_type'], entry['color'])
+
+        # Draw name
+        name_surface = leaderboard_info['font_entry'].render(
+            "You" if entry['isPlayer'] else "Enemy", True, BLACK)
+        leaderboard_info['surface'].blit(name_surface,
+                                         (leaderboard_info['padding'] * 14,
+                                          y_pos + leaderboard_info['entry_height'] // 4))
+
+        # Draw score
+        score_surface = leaderboard_info['font_entry'].render(str(int(entry['score'])), True, BLACK)
+        score_rect = score_surface.get_rect()
+        score_rect.right = leaderboard_info['width'] - leaderboard_info['padding']
+        score_rect.y = y_pos + leaderboard_info['entry_height'] // 4
+        leaderboard_info['surface'].blit(score_surface, score_rect)
+
+    return True
+
+
+def draw_leaderboard(screen, leaderboard_info):
+    # Position leaderboard in top right corner
+    leaderboard_x = SCREEN_WIDTH - leaderboard_info['width'] - 10
+    leaderboard_y = 40
+
+    # Blit the pre-rendered surface
+    screen.blit(leaderboard_info['surface'], (leaderboard_x, leaderboard_y))
+
+def draw_leaderboard_indicator(visible):
+    font = pygame.font.SysFont(None, 24)
+    text = f"Leaderboard: {'ON' if visible else 'OFF'}"
+    color = HEALTHBARGREEN if visible else RED
+    text_surface = font.render(text, True, color)
+    screen.blit(text_surface, (10, 70))  # Position below autospin indicator
+
 def game_loop():
     global game_over, killer_object
 
@@ -1315,8 +1842,11 @@ def game_loop():
     player = Player()
     shapes = initialize_shapes(player)
     enemies = initialize_enemies() if include_enemies else []
+    # Add this line right after creating enemies:
+    leaderboard_info = create_leaderboard_surface()  # Add this line here
     running = True
     minimap_mode = 0
+    leaderboard_visible = True  # Add this line
     game_over = False
     start_time = time.time()
     killer_object = ""
@@ -1336,6 +1866,8 @@ def game_loop():
                 if player.shoot_cooldown <= 0:
                     player.shoot()
                 if event.button == 1:
+                    if handle_attribute_upgrade(player, event.pos):
+                        continue
                     if handle_upgrade_click(player, event.pos):
                         continue
                     if player.shoot_cooldown <= 0:
@@ -1343,12 +1875,14 @@ def game_loop():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_e:
                     player.autofire = not player.autofire
-                if event.key == pygame.K_c:
+                elif event.key == pygame.K_c:
                     player.autospin = not player.autospin
-                if event.key == pygame.K_o:
+                elif event.key == pygame.K_o:
                     player.take_damage(player.health, "Self-Destruct")
-                if event.key == pygame.K_TAB:
+                elif event.key == pygame.K_TAB:
                     minimap_mode = (minimap_mode + 1) % 5
+                elif event.key == pygame.K_l:
+                    leaderboard_visible = not leaderboard_visible
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_k]:
@@ -1380,9 +1914,11 @@ def game_loop():
 
                 player.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
 
-            player.check_collision_with_shapes(shapes)
+            player.check_collision_with_shapes(shapes, 0)
             if include_enemies:
-                player.check_collision_with_enemies([enemy for enemy in enemies if enemy.alive])
+                for enemy in enemies:
+                    if enemy.alive:
+                        enemy.check_collision_with_shapes(shapes, 1)
             player.update_level()
 
             # Handle player bullets
@@ -1391,7 +1927,7 @@ def game_loop():
                 if bullet.off_screen():
                     collision_effects.append(bullet.create_collision_effect())
                     player.bullets.remove(bullet)
-                elif bullet.check_collision(shapes, player):
+                elif bullet.check_collision(shapes, player):  # Pass player instance
                     collision_effects.append(bullet.create_collision_effect())
                     player.bullets.remove(bullet)
                 elif include_enemies:
@@ -1412,10 +1948,12 @@ def game_loop():
             if include_enemies:
                 for enemy in enemies:
                     if enemy.alive:
-                        enemy.check_collision_with_enemies(enemies)
                         for bullet in enemy.bullets[:]:
                             bullet.update()
                             if bullet.off_screen():
+                                collision_effects.append(bullet.create_collision_effect())
+                                enemy.bullets.remove(bullet)
+                            elif bullet.check_collision(shapes, enemy):  # Pass enemy instance
                                 collision_effects.append(bullet.create_collision_effect())
                                 enemy.bullets.remove(bullet)
                             else:
@@ -1425,17 +1963,16 @@ def game_loop():
                                     collision_effects.append(player_bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
                                     player.bullets.remove(player_bullet)
-                                elif bullet.check_collision(shapes, player):
-                                    collision_effects.append(bullet.create_collision_effect())
-                                    enemy.bullets.remove(bullet)
                                 elif bullet.check_collision_with_tank(player):
                                     collision_effects.append(bullet.create_collision_effect())
                                     enemy.bullets.remove(bullet)
 
         # Drawing
+
         draw_grid(player)
         draw_score(screen, player.score)
         draw_level_info(screen, player)
+        draw_attributes(screen, player)
 
         for shape in shapes:
             shape.draw(player)
@@ -1453,6 +1990,7 @@ def game_loop():
             if effect.is_finished():
                 collision_effects.remove(effect)
 
+        # In the drawing section of the game loop, add:
         player.draw(screen)
         for bullet in player.bullets:
             bullet.draw(player)
@@ -1461,10 +1999,16 @@ def game_loop():
 
         if minimap_mode > 0:
             draw_minimap(player, shapes, enemies, minimap_mode)
-
         draw_autofire_indicator(player)
         draw_autospin_indicator(player)
+
         draw_minimap_indicator(minimap_mode)
+
+        # Add leaderboard drawing here
+        if include_enemies and leaderboard_visible:
+            update_leaderboard_surface(leaderboard_info, player, enemies, pygame.time.get_ticks())
+            draw_leaderboard(screen, leaderboard_info)
+        draw_leaderboard_indicator(leaderboard_visible)
 
         pygame.display.flip()
         clock.tick(60)
@@ -1476,6 +2020,7 @@ def game_loop():
             halfscore = scores[player.level//2]
             player = Player()
             player.score=halfscore
+            leaderboard_info = create_leaderboard_surface()  # Add this line here
             start_time = time.time()
 
     pygame.quit()
