@@ -1077,9 +1077,6 @@ class Bullet:
         self.world_y += self.vel_y
         self.lifespan -= 1
 
-        self.world_x = max(self.radius, min(WORLD_WIDTH - self.radius, self.world_x))
-        self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
-
     def draw(self, tank):
         if not is_on_screen(self.world_x, self.world_y, self.base_radius * 2, tank):
             return
@@ -1087,16 +1084,15 @@ class Bullet:
         screen_x = int((self.world_x - tank.world_x) * tank.zoom + tank.x)
         screen_y = int((self.world_y - tank.world_y) * tank.zoom + tank.y)
 
-        if 0 <= screen_x < SCREEN_WIDTH and 0 <= screen_y < SCREEN_HEIGHT:
+        if (screen_x + self.radius >= 0 and screen_x - self.radius <= SCREEN_WIDTH and
+            screen_y + self.radius >= 0 and screen_y - self.radius <= SCREEN_HEIGHT):
             drawn_radius = int(self.base_radius * tank.zoom)
             pygame.draw.circle(screen, self.bulletOutline, (screen_x, screen_y),
                                drawn_radius + int(4 * tank.zoom))
             pygame.draw.circle(screen, self.color, (screen_x, screen_y), drawn_radius)
 
     def off_screen(self):
-        return (self.world_x < self.radius or self.world_x > WORLD_WIDTH - self.radius or
-                self.world_y < self.radius or self.world_y > WORLD_HEIGHT - self.radius or
-                self.lifespan <= 0)
+        return self.lifespan <= 0
 
     def check_collision_with_enemies(self, enemies, tank):
         for enemy in enemies:
