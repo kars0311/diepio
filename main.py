@@ -429,9 +429,9 @@ class Tank:
             self.bullets.append(bullet)
         else:
             # Original enemy bullet creation logic
-            bullet_speed = 8
+            bullet_speed = 12
             if self.tank_type == "sniper":
-                bullet_speed = 12
+                bullet_speed = 16
             vel_x = math.cos(angle) * bullet_speed
             vel_y = math.sin(angle) * bullet_speed
 
@@ -773,7 +773,7 @@ class Player(Tank):
             "Health Regen": 0.1,
             "Max Health": 500,
             "Body Damage": 5,
-            "Bullet Speed": 8,
+            "Bullet Speed": 12,
             "Bullet Penetration": 1,
             "Bullet Damage": 25,
             "Reload": 15,
@@ -1197,27 +1197,63 @@ class Player(Tank):
                         shape.world_x -= math.cos(angle) * push_distance / 2
                         shape.world_y -= math.sin(angle) * push_distance / 2
 
+
 class Bullet:
     def __init__(self, x, y, vel_x, vel_y, tankNum, owner=None):
         self.world_x = x
         self.world_y = y
+        self.initial_vel_x = vel_x  # Store initial velocities
+        self.initial_vel_y = vel_y
         self.vel_x = vel_x
         self.vel_y = vel_y
 
         if owner and isinstance(owner, Player):
             # Get damage directly from the player's stats
-            self.damage = owner.bullet_damage  # This is already calculated in update_stats()
+            self.damage = owner.bullet_damage
         else:
             self.damage = 25 - (tankNum * 15)
 
         self.base_radius = BASE_BULLET_SIZE
         self.radius = self.base_radius
-        self.lifespan = 200
+        self.lifespan = 100
+        self.initial_lifespan = 200  # Store initial lifespan
         self.tankNum = tankNum
         self.color = AQUA if tankNum == 0 else RED
         self.bulletOutline = TANKOUTLINE if tankNum == 0 else ENEMYOUTLINE
         self.owner = owner
 
+        # Enhanced speed decay parameters
+        self.min_speed_multiplier = 0.3  # Bullet will slow down to 30% of initial speed
+        self.speed_decay_start = 0.8  # Start slowing down when 80% of lifespan remains
+        self.decay_exponent = 1.5  # Makes the decay curve more aggressive
+
+    def update(self):
+        # Calculate speed multiplier based on remaining lifespan
+        life_fraction = self.lifespan / self.initial_lifespan
+
+        if life_fraction <= self.speed_decay_start:
+            # Calculate decay progress with non-linear curve
+            decay_progress = 1.0 - (life_fraction / self.speed_decay_start)
+            # Apply exponential curve to make decay more pronounced
+            decay_progress = pow(decay_progress, self.decay_exponent)
+
+            # Calculate speed multiplier
+            speed_multiplier = 1.0 - (decay_progress * (1.0 - self.min_speed_multiplier))
+
+            # Apply speed multiplier to current velocity
+            self.vel_x = self.initial_vel_x * speed_multiplier
+            self.vel_y = self.initial_vel_y * speed_multiplier
+
+        # Update position with current velocity
+        self.world_x += self.vel_x
+        self.world_y += self.vel_y
+        self.lifespan -= 1
+
+        # Keep bullets within world bounds
+        self.world_x = max(self.radius, min(WORLD_WIDTH - self.radius, self.world_x))
+        self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
+
+    # Rest of the Bullet class methods remain unchanged...
     def check_collision(self, shapes, attacker):
         for shape in shapes:
             if shape.alive:
@@ -1231,14 +1267,6 @@ class Bullet:
                         shape.take_damage(self.damage, attacker)
                         return True
         return False
-
-    def update(self):
-        self.world_x += self.vel_x
-        self.world_y += self.vel_y
-        self.lifespan -= 1
-
-        self.world_x = max(self.radius, min(WORLD_WIDTH - self.radius, self.world_x))
-        self.world_y = max(self.radius, min(WORLD_HEIGHT - self.radius, self.world_y))
 
     def draw(self, tank):
         if not is_on_screen(self.world_x, self.world_y, self.base_radius * 2, tank):
@@ -1276,7 +1304,8 @@ class Bullet:
     def check_collision_with_bullets(self, other_bullets):
         for other_bullet in other_bullets:
             if self.tankNum != other_bullet.tankNum:
-                distance = math.sqrt((self.world_x - other_bullet.world_x) ** 2 + (self.world_y - other_bullet.world_y) ** 2)
+                distance = math.sqrt(
+                    (self.world_x - other_bullet.world_x) ** 2 + (self.world_y - other_bullet.world_y) ** 2)
                 if distance < self.radius + other_bullet.radius:
                     return other_bullet
         return None
