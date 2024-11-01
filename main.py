@@ -1386,12 +1386,13 @@ def handle_upgrade_click(tank, mouse_pos):
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
     return False
 
+
 def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
     if player.available_points <= 0:
         return False
 
-    # If attribute_name is provided, use it directly
-    if attribute_name is not None:
+    # If attribute_name is provided and is a valid string key
+    if isinstance(attribute_name, str) and attribute_name in player.attribute_levels:
         if player.attribute_levels[attribute_name] < player.max_attribute_level:
             player.attribute_levels[attribute_name] += 1
             player.available_points -= 1
@@ -1401,18 +1402,20 @@ def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
             return True
         return False
 
-    # Otherwise, handle mouse click logic
+    # If mouse_pos is provided (click handling)
     if mouse_pos:
+        # Calculate relative position
         relative_y = mouse_pos[1] - (ATTRIBUTES_Y - 50)
         relative_x = mouse_pos[0] - ATTRIBUTES_X
 
+        # Map Y position to attributes
         y = 50  # Start below points indicator
-        for attribute, level in player.attribute_levels.items():
-            if level < player.max_attribute_level:
+        for attribute in player.attribute_levels:
+            if player.attribute_levels[attribute] < player.max_attribute_level:
                 button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
                 button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
 
-                if (button_rect.collidepoint(relative_x, relative_y)):
+                if button_rect.collidepoint(relative_x, relative_y):
                     player.attribute_levels[attribute] += 1
                     player.available_points -= 1
                     player.update_stats()
@@ -1421,6 +1424,7 @@ def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
                     return True
 
             y += ATTRIBUTE_SECTION_HEIGHT
+
     return False
 
 def create_attributes_surface(player):
