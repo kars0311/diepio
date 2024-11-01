@@ -652,6 +652,8 @@ class Enemy(Tank):
 class Player(Tank):
     def __init__(self):
         super().__init__(WORLD_WIDTH // 2, WORLD_HEIGHT // 2, size=40, speed=5, color=AQUA)
+        self.attributes_surface = None
+        self.attributes_need_update = True
         # Add attribute levels
         self.attribute_levels = {
             "Health Regen": 0,
@@ -774,17 +776,20 @@ class Player(Tank):
 
     def level_up(self):
         if self.level < 45:
-            previous_level = self.level  # Store previous level
+            previous_level = self.level
             self.level += 1
             self.score = scores[self.level - 1]
 
             # Calculate points for this level up
             if self.level >= 2 and self.level <= 28:
                 self.available_points += 1
+                self.attributes_need_update = True  # Mark for update
             elif self.level == 30:
                 self.available_points += 1
+                self.attributes_need_update = True  # Mark for update
             elif self.level > 30 and self.level <= 45 and (self.level - 30) % 3 == 0:
                 self.available_points += 1
+                self.attributes_need_update = True  # Mark for update
 
     def get_progress_to_next_level(self):
         if self.level >= len(levels):
@@ -1366,81 +1371,100 @@ def handle_upgrade_click(tank, mouse_pos):
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
     return False
 
-def draw_attributes(screen, player):
-    # Draw available points indicator - made larger and more visible
-    if player.available_points > 0:
-        font = pygame.font.SysFont(None, 36)  # Larger font
-        points_text = f"Upgrade Points: {player.available_points}"
-        text_surface = font.render(points_text, True, RED)  # Changed to red for visibility
-        points_rect = text_surface.get_rect(topleft=(ATTRIBUTES_X, ATTRIBUTES_Y - 50))
-        screen.blit(text_surface, points_rect)
-
-    # Draw attribute bars
-    font = pygame.font.SysFont(None, 24)  # Slightly larger font for attributes
-    y = ATTRIBUTES_Y
-
-    for attribute, level in player.attribute_levels.items():
-        # Draw attribute name
-        name_surface = font.render(attribute, True, BLACK)
-        screen.blit(name_surface, (ATTRIBUTES_X, y))
-
-        # Draw level bar background
-        bar_rect = pygame.Rect(ATTRIBUTES_X + 150, y, ATTRIBUTE_BAR_WIDTH, ATTRIBUTE_BAR_HEIGHT)
-        pygame.draw.rect(screen, GRAY, bar_rect)
-
-        # Draw filled portion of bar
-        if level > 0:
-            filled_width = (ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * level
-            filled_rect = pygame.Rect(ATTRIBUTES_X + 150, y, filled_width, ATTRIBUTE_BAR_HEIGHT)
-            pygame.draw.rect(screen, GREEN, filled_rect)
-
-        # Draw bar segments
-        for i in range(player.max_attribute_level):
-            segment_x = ATTRIBUTES_X + 150 + (ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * i
-            pygame.draw.line(screen, BLACK,
-                             (segment_x, y),
-                             (segment_x, y + ATTRIBUTE_BAR_HEIGHT))
-
-        # Draw plus button (made more visible)
-        if player.available_points > 0 and level < player.max_attribute_level:
-            button_x = ATTRIBUTES_X + 150 + ATTRIBUTE_BAR_WIDTH + 10
-            button_y = y
-            button_rect = pygame.Rect(button_x, button_y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
-
-            # Draw button background
-            pygame.draw.rect(screen, GREEN, button_rect)
-            # Draw button border
-            pygame.draw.rect(screen, BLACK, button_rect, 2)
-
-            # Draw plus symbol
-            plus_font = pygame.font.SysFont(None, 30)
-            plus_text = plus_font.render("+", True, BLACK)
-            plus_rect = plus_text.get_rect(center=button_rect.center)
-            screen.blit(plus_text, plus_rect)
-
-            # Debug rectangle to show clickable area
-            pygame.draw.rect(screen, BLACK, button_rect, 1)
-
-        y += ATTRIBUTE_SECTION_HEIGHT
-
 def handle_attribute_upgrade(player, mouse_pos):
     if player.available_points <= 0:
         return False
 
-    y = ATTRIBUTES_Y
+    # Adjust mouse position to be relative to the attributes surface
+    relative_y = mouse_pos[1] - (ATTRIBUTES_Y - 50)
+    relative_x = mouse_pos[0] - ATTRIBUTES_X
+
+    y = 50  # Start below points indicator
     for attribute, level in player.attribute_levels.items():
         if level < player.max_attribute_level:
-            button_x = ATTRIBUTES_X + 150 + ATTRIBUTE_BAR_WIDTH + 10
+            button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
             button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
 
-            if button_rect.collidepoint(mouse_pos):
+            if (button_rect.collidepoint(relative_x, relative_y)):
                 player.attribute_levels[attribute] += 1
                 player.available_points -= 1
-                player.update_stats()  # Add this line to update stats when points are spent
+                player.update_stats()
+                player.attributes_need_update = True
+                update_attribute_surface(player)  # Immediately update the surface
                 return True
 
         y += ATTRIBUTE_SECTION_HEIGHT
     return False
+
+def create_attributes_surface(player):
+    # Create a surface for attributes display
+    ATTRIBUTES_SURFACE_WIDTH = ATTRIBUTE_BAR_WIDTH + 200  # Adjust as needed
+    ATTRIBUTES_SURFACE_HEIGHT = 300  # Adjust as needed
+    surface = pygame.Surface((ATTRIBUTES_SURFACE_WIDTH, ATTRIBUTES_SURFACE_HEIGHT), pygame.SRCALPHA)
+    surface.fill((0, 0, 0, 0))  # Make surface transparent
+
+    # Draw available points indicator
+    if player.available_points > 0:
+        font = pygame.font.SysFont(None, 36)
+        points_text = f"Upgrade Points: {player.available_points}"
+        text_surface = font.render(points_text, True, RED)
+        points_rect = text_surface.get_rect(topleft=(0, 0))
+        surface.blit(text_surface, points_rect)
+
+    # Draw attribute bars
+    font = pygame.font.SysFont(None, 24)
+    y = 50  # Start below points indicator
+
+    for attribute, level in player.attribute_levels.items():
+        # Draw attribute name
+        name_surface = font.render(attribute, True, BLACK)
+        surface.blit(name_surface, (0, y))
+
+        # Draw level bar background
+        bar_rect = pygame.Rect(150, y, ATTRIBUTE_BAR_WIDTH, ATTRIBUTE_BAR_HEIGHT)
+        pygame.draw.rect(surface, GRAY, bar_rect)
+
+        # Draw filled portion of bar - fixed this part
+        if level > 0:
+            filled_width = int((ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * level)
+            filled_rect = pygame.Rect(150, y, filled_width, ATTRIBUTE_BAR_HEIGHT)
+            pygame.draw.rect(surface, GREEN, filled_rect)
+
+        # Draw bar segments
+        for i in range(player.max_attribute_level):
+            segment_x = 150 + (ATTRIBUTE_BAR_WIDTH / player.max_attribute_level) * i
+            pygame.draw.line(surface, BLACK,
+                           (segment_x, y),
+                           (segment_x, y + ATTRIBUTE_BAR_HEIGHT))
+
+        # Draw plus button if upgrades available
+        if player.available_points > 0 and level < player.max_attribute_level:
+            button_x = 150 + ATTRIBUTE_BAR_WIDTH + 10
+            button_rect = pygame.Rect(button_x, y, PLUS_BUTTON_SIZE, PLUS_BUTTON_SIZE)
+            pygame.draw.rect(surface, GREEN, button_rect)
+            pygame.draw.rect(surface, BLACK, button_rect, 2)
+
+            plus_font = pygame.font.SysFont(None, 30)
+            plus_text = plus_font.render("+", True, BLACK)
+            plus_rect = plus_text.get_rect(center=button_rect.center)
+            surface.blit(plus_text, plus_rect)
+
+        y += ATTRIBUTE_SECTION_HEIGHT
+
+    return surface
+
+def update_attribute_surface(player):
+    # Update the cached surface only when needed
+    player.attributes_surface = create_attributes_surface(player)
+    player.attributes_need_update = False
+
+def draw_attributes(screen, player):
+    # Create initial surface if it doesn't exist
+    if not hasattr(player, 'attributes_surface') or player.attributes_need_update:
+        update_attribute_surface(player)
+
+    # Draw the cached surface
+    screen.blit(player.attributes_surface, (ATTRIBUTES_X, ATTRIBUTES_Y - 50))
 
 def draw_score(screen, score):
     font = pygame.font.SysFont(None, 36)
