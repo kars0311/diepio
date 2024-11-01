@@ -331,11 +331,25 @@ class Tank:
         pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_thickness)
 
     def create_bullet(self, x, y, angle):
-        bullet_speed = 8
-        if self.tank_type == "sniper":
-            bullet_speed = 12
-        bullet = Bullet(x, y, math.cos(angle) * bullet_speed, math.sin(angle) * bullet_speed, 1 if isinstance(self, Enemy) else 0)
-        bullet.owner = self  # Set the owner reference
+        if isinstance(self, Player):
+            # Apply bullet speed multiplier for player
+            bullet_speed = self.base_stats["Bullet Speed"] * (1 + self.attribute_levels["Bullet Speed"] * 0.2)
+            if self.tank_type == "sniper":
+                bullet_speed = bullet_speed * 1.5  # Sniper gets 50% more base speed
+
+            # Calculate velocity components with the modified speed
+            vel_x = math.cos(angle) * bullet_speed
+            vel_y = math.sin(angle) * bullet_speed
+        else:
+            # For enemies, use the old logic
+            bullet_speed = 8
+            if self.tank_type == "sniper":
+                bullet_speed = 12
+            vel_x = math.cos(angle) * bullet_speed
+            vel_y = math.sin(angle) * bullet_speed
+
+        bullet = Bullet(x, y, vel_x, vel_y, 1 if isinstance(self, Enemy) else 0, self)
+        bullet.owner = self
         self.bullets.append(bullet)
 
     def take_damage(self, damage, attacker=None):
@@ -1028,14 +1042,15 @@ class Bullet:
     def __init__(self, x, y, vel_x, vel_y, tankNum, owner=None):
         self.world_x = x
         self.world_y = y
+        self.vel_x = vel_x
+        self.vel_y = vel_y
+
         if owner and isinstance(owner, Player):
-            self.vel_x = vel_x
-            self.vel_y = vel_y
-            self.damage = owner.bullet_damage
+            # Get damage directly from the player's stats
+            self.damage = owner.bullet_damage  # This is already calculated in update_stats()
         else:
-            self.vel_x = vel_x
-            self.vel_y = vel_y
             self.damage = 25 - (tankNum * 15)
+
         self.base_radius = BASE_BULLET_SIZE
         self.radius = self.base_radius
         self.lifespan = 200
