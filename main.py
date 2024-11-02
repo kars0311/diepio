@@ -2988,3 +2988,4 @@ if __name__ == "__main__":
     pygame.display.set_caption("Diep.io")
     clock = pygame.time.Clock()
     game_loop()
+
