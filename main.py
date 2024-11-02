@@ -211,6 +211,8 @@ class Tank:
             self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
         elif self.tank_type == "gunner":
             self.draw_gunner_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+        elif self.tank_type == "quad":
+            self.draw_quad_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
         # Draw tank outline
         pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
@@ -400,6 +402,21 @@ class Tank:
 
             # Draw inner cannon
             pygame.draw.polygon(screen, CANNONGREY, cannon_points)
+
+    def draw_quad_cannons(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        # Base angles for quad configuration, but add the tank's rotation
+        base_angles = [0, math.pi / 2, math.pi, 3 * math.pi / 2]  # Right, Down, Left, Up
+
+        for i, angle in enumerate(base_angles):
+            # Add the tank's rotation angle to each cannon
+            actual_angle = angle + self.angle
+
+            # Calculate cannon endpoint with rotated angle
+            drawn_length = (self.cannon_length - (self.barrel_recoil[i] * self.zoom)) * self.zoom
+            cannon_end_x = screen_x + math.cos(actual_angle) * drawn_length
+            cannon_end_y = screen_y + math.sin(actual_angle) * drawn_length
+
+            self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
 
     def create_bullet(self, x, y, angle):
         if isinstance(self, Player):
@@ -867,6 +884,13 @@ class Player(Tank):
         self.base_reload = self.base_stats["Reload"] * 0.6  # 40% faster base reload
         self.upgrade_available = False
 
+    def upgrade_to_quad(self):
+        self.tank_type = "quad"
+        self.cannon_length = TILE_SIZE * 3  # 75 pixels
+        self.cannon_thickness = TILE_SIZE * 1.2  # 30 pixels
+        self.barrel_recoil = [0, 0, 0, 0]  # One for each direction
+        self.upgrade_available = False
+
     def update_level(self):
         previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
@@ -971,6 +995,9 @@ class Player(Tank):
             elif self.tank_type == "gunner":
                 self.shoot_gunner()
                 self.shoot_cooldown = self.base_reload * 0.4  # Even faster shooting
+            elif self.tank_type == "quad":
+                self.shoot_quad()
+                self.shoot_cooldown = self.base_reload
             elif self.tank_type == "twin":
                 self.shoot_twin()
                 self.shoot_cooldown = self.base_reload / 2
@@ -1097,6 +1124,24 @@ class Player(Tank):
 
         # Increment the shot counter
         self.gunner_shot_count += 1
+
+    def shoot_quad(self):
+        # Use the same rotation for shooting
+        base_angles = [0, math.pi / 2, math.pi, 3 * math.pi / 2]
+
+        for i, angle in enumerate(base_angles):
+            actual_angle = angle + self.angle
+
+            bullet_x = self.world_x + math.cos(actual_angle) * self.size
+            bullet_y = self.world_y + math.sin(actual_angle) * self.size
+
+            self.create_bullet(bullet_x, bullet_y, actual_angle)
+            self.barrel_recoil[i] = self.max_barrel_recoil
+
+            # Add recoil effect
+            recoil_force = 0.2
+            self.recoil_velocity_x -= math.cos(actual_angle) * recoil_force
+            self.recoil_velocity_y -= math.sin(actual_angle) * recoil_force
 
     def handle_autofire(self):
         if self.autofire and self.shoot_cooldown <= 0:
@@ -1565,6 +1610,17 @@ def draw_upgrade_buttons(screen, tank):
         text = font.render("Gunner", True, BLACK)
         text_rect = text.get_rect(center=button_rect.center)
         screen.blit(text, text_rect)
+    # Add Quad Tank upgrade option for level 30 twin tanks
+    if tank.level >= 30 and (tank.tank_type == "twin" or tank.tank_type == "flank"):
+        font = pygame.font.SysFont(None, 24)
+        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
+                                UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+        pygame.draw.rect(screen, WHITE, button_rect)
+        pygame.draw.rect(screen, BLACK, button_rect, 2)
+
+        text = font.render("Quad Tank", True, BLACK)
+        text_rect = text.get_rect(center=button_rect.center)
+        screen.blit(text, text_rect)
 
 def handle_upgrade_click(tank, mouse_pos):
     if tank.level >= 15 and tank.tank_type == "basic":
@@ -1588,6 +1644,14 @@ def handle_upgrade_click(tank, mouse_pos):
         if button_rect.collidepoint(mouse_pos):
             tank.upgrade_to_gunner()
             return True
+    # Add Quad Tank upgrade handling
+    if tank.level >= 30 and (tank.tank_type == "twin" or tank.tank_type == "flank"):
+        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
+                                UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+        if button_rect.collidepoint(mouse_pos):
+            tank.upgrade_to_quad()
+            return True
+    return False
     return False
 
 def create_attributes_surface(player):
