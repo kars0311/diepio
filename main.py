@@ -489,6 +489,8 @@ class Tank:
                 self.draw_gunner_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
             elif self.tank_type == "quad":
                 self.draw_quad_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+            elif self.tank_type == "octo":
+                self.draw_octo_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
 
             # Draw tank outline and body
             pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
@@ -791,6 +793,23 @@ class Tank:
         end_line_end = (cannon_end_x - math.cos(perp_angle) * half_width,
                         cannon_end_y - math.sin(perp_angle) * half_width)
         pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_width)
+
+    def draw_octo_cannons(self, screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness):
+        # Base angles for octo configuration (8 directions), but add the tank's rotation
+        base_angles = [0, math.pi / 4, math.pi / 2, 3 * math.pi / 4, math.pi, 5 * math.pi / 4, 3 * math.pi / 2,
+                       7 * math.pi / 4]
+        # Right, Right-Down, Down, Left-Down, Left, Left-Up, Up, Right-Up
+
+        for i, angle in enumerate(base_angles):
+            # Add the tank's rotation angle to each cannon
+            actual_angle = angle + self.angle
+
+            # Calculate cannon endpoint with rotated angle
+            recoil_adjusted_length = drawn_cannon_length - (self.barrel_recoil[i] * self.zoom)
+            cannon_end_x = screen_x + math.cos(actual_angle) * recoil_adjusted_length
+            cannon_end_y = screen_y + math.sin(actual_angle) * recoil_adjusted_length
+
+            self.draw_cannon(screen, screen_x, screen_y, cannon_end_x, cannon_end_y, drawn_cannon_thickness)
 
     def create_bullet(self, x, y, angle):
         if isinstance(self, Player):
@@ -1242,7 +1261,10 @@ class Player(Tank):
         self.bullet_damage = self.base_stats["Bullet Damage"] * (1 + self.attribute_levels["Bullet Damage"] * 0.4)
 
         # Reload (15% decrease in cooldown per level)
-        self.base_reload = self.base_stats["Reload"] / (1 + self.attribute_levels["Reload"] * 0.15)
+        base_reload_time = self.base_stats["Reload"]
+        if self.tank_type == "octo":
+            base_reload_time = base_reload_time / 2  # Halve the base reload time for octo tank
+        self.base_reload = base_reload_time / (1 + self.attribute_levels["Reload"] * 0.15)
 
         # Movement Speed (15% increase per level)
         self.speed = self.base_stats["Movement Speed"] * (1 + self.attribute_levels["Movement Speed"] * 0.15)
@@ -1380,6 +1402,18 @@ class Player(Tank):
         self.auto_turret_recoil = 0
         self.upgrade_available = False
 
+    def upgrade_to_octo(self):
+        self.tank_type = "octo"
+        self.cannon_length = TILE_SIZE * 3  # 75 pixels
+        self.cannon_thickness = TILE_SIZE * 1.2  # 30 pixels
+        self.barrel_recoil = [0, 0, 0, 0, 0, 0, 0, 0]  # One for each direction
+        # Add firing pattern tracking
+        self.octo_fire_group = 0  # 0 for plus formation, 1 for diagonal
+        self.upgrade_available = False
+        # The overall cooldown should be half of quad tank's cooldown
+        self.base_reload = self.base_stats["Reload"] / 2
+        self.update_stats()
+
     def update_level(self):
         previous_level = self.level
         self.level = np.searchsorted(scores, self.score, side='right')
@@ -1496,7 +1530,7 @@ class Player(Tank):
 
     def rotate_to_mouse(self, mouse_pos):
         if self.autospin:
-            self.angle += 0.05
+            self.angle += 0.03
         else:
             dx, dy = mouse_pos[0] - self.x, mouse_pos[1] - self.y
             self.angle = math.atan2(dy, dx)
@@ -1530,6 +1564,9 @@ class Player(Tank):
             elif self.tank_type == "sniper":
                 self.shoot_sniper()
                 self.shoot_cooldown = self.base_reload * 2
+            elif self.tank_type == "octo":
+                self.shoot_octo()
+                self.shoot_cooldown = self.base_reload
 
     def shoot_basic(self):
         bullet_x = self.world_x + math.cos(self.angle) * self.size
@@ -1665,6 +1702,42 @@ class Player(Tank):
             recoil_force = 0.2
             self.recoil_velocity_x -= math.cos(actual_angle) * recoil_force
             self.recoil_velocity_y -= math.sin(actual_angle) * recoil_force
+
+    def shoot_octo(self):
+        current_time = pygame.time.get_ticks()
+
+        # Calculate base angles but add the tank's current rotation
+        # First four are plus formation (0°, 90°, 180°, 270°)
+        # Second four are diagonal (45°, 135°, 225°, 315°)
+        plus_angles = [0, math.pi / 2, math.pi, 3 * math.pi / 2]
+        diagonal_angles = [math.pi / 4, 3 * math.pi / 4, 5 * math.pi / 4, 7 * math.pi / 4]
+
+        # Select which group to fire based on timing
+        firing_group = plus_angles if self.octo_fire_group == 0 else diagonal_angles
+
+        # Fire the current group
+        for i, angle in enumerate(firing_group):
+            # Add the tank's rotation angle to each cannon
+            actual_angle = angle + self.angle
+
+            # Calculate bullet spawn position
+            bullet_x = self.world_x + math.cos(actual_angle) * self.size
+            bullet_y = self.world_y + math.sin(actual_angle) * self.size
+
+            # Create bullet with the correct angle
+            self.create_bullet(bullet_x, bullet_y, actual_angle)
+
+            # Apply recoil to the appropriate cannon
+            recoil_index = i if self.octo_fire_group == 0 else i + 4
+            self.barrel_recoil[recoil_index] = self.max_barrel_recoil
+
+            # Add recoil effect
+            recoil_force = 0.2
+            self.recoil_velocity_x -= math.cos(actual_angle) * recoil_force
+            self.recoil_velocity_y -= math.sin(actual_angle) * recoil_force
+
+        # Toggle the firing group for next time
+        self.octo_fire_group = 1 - self.octo_fire_group
 
     def handle_autofire(self):
         if self.autofire and self.shoot_cooldown <= 0:
@@ -2185,14 +2258,19 @@ def draw_upgrade_buttons(screen, tank):
         screen.blit(text, text_rect)
     if tank.level >= 45 and tank.tank_type == "quad":
         font = pygame.font.SysFont(None, 24)
-        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
-                                  UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
-        pygame.draw.rect(screen, WHITE, button_rect)
-        pygame.draw.rect(screen, BLACK, button_rect, 2)
+        button_y = UPGRADE_BUTTON_MARGIN
 
-        text = font.render("Auto Quad", True, BLACK)
-        text_rect = text.get_rect(center=button_rect.center)
-        screen.blit(text, text_rect)
+        for upgrade_type in ["Auto Quad", "Octo Tank"]:
+            button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, button_y,
+                                      UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+            pygame.draw.rect(screen, WHITE, button_rect)
+            pygame.draw.rect(screen, BLACK, button_rect, 2)
+
+            text = font.render(upgrade_type, True, BLACK)
+            text_rect = text.get_rect(center=button_rect.center)
+            screen.blit(text, text_rect)
+
+            button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
 
 
 def handle_upgrade_click(tank, mouse_pos):
@@ -2211,33 +2289,45 @@ def handle_upgrade_click(tank, mouse_pos):
                     tank.upgrade_to_sniper()
                 return True
             button_y += UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN
+
     if tank.level >= 30 and tank.tank_type == "machine_gun":
         button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
                                   UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
         if button_rect.collidepoint(mouse_pos):
             tank.upgrade_to_gunner()
             return True
-    # Add Quad Tank upgrade handling
+
     if tank.level >= 30 and (tank.tank_type == "twin" or tank.tank_type == "flank"):
         button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
                                   UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
         if button_rect.collidepoint(mouse_pos):
             tank.upgrade_to_quad()
             return True
+
     if tank.level >= 45 and tank.tank_type == "gunner":
         button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
                                   UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
         if button_rect.collidepoint(mouse_pos):
             tank.upgrade_to_auto_gunner()
             return True
+
     if tank.level >= 45 and tank.tank_type == "quad":
-        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
-                                  UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
-        if button_rect.collidepoint(mouse_pos):
+        # First button for Auto Quad
+        auto_quad_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
+                                     UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+        # Second button for Octo Tank
+        octo_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN,
+                                UPGRADE_BUTTON_MARGIN + UPGRADE_BUTTON_HEIGHT + UPGRADE_BUTTON_MARGIN,
+                                UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+
+        if auto_quad_rect.collidepoint(mouse_pos):
             tank.upgrade_to_auto_quad()
             return True
-    return False
+        elif octo_rect.collidepoint(mouse_pos):
+            tank.upgrade_to_octo()
+            return True
 
+    return False
 
 def create_attributes_surface(player):
     # Create a surface for attributes display
@@ -2306,7 +2396,6 @@ def create_attributes_surface(player):
 
     return surface
 
-
 def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
     if player.available_points <= 0:
         return False
@@ -2348,12 +2437,10 @@ def handle_attribute_upgrade(player, attribute_name=None, mouse_pos=None):
 
     return False
 
-
 def update_attribute_surface(player):
     # Update the cached surface only when needed
     player.attributes_surface = create_attributes_surface(player)
     player.attributes_need_update = False
-
 
 def draw_attributes(screen, player):
     # Create initial surface if it doesn't exist
@@ -2363,14 +2450,12 @@ def draw_attributes(screen, player):
     # Draw the cached surface
     screen.blit(player.attributes_surface, (ATTRIBUTES_X, ATTRIBUTES_Y - 50))
 
-
 def draw_score(screen, score):
     font = pygame.font.SysFont(None, 36)
     score_text = font.render(f"Score: {score}", True, BLACK)
     score_rect = score_text.get_rect()
     score_rect.topright = (SCREEN_WIDTH - 10, 10)
     screen.blit(score_text, score_rect)
-
 
 def draw_autofire_indicator(tank):
     font = pygame.font.SysFont(None, 24)
@@ -2379,14 +2464,12 @@ def draw_autofire_indicator(tank):
     text_surface = font.render(autofire_text, True, autofire_color)
     screen.blit(text_surface, (10, 10))
 
-
 def draw_autospin_indicator(tank):
     font = pygame.font.SysFont(None, 24)
     autospin_text = "Autospin: ON" if tank.autospin else "Autospin: OFF"
     autospin_color = HEALTHBARGREEN if tank.autospin else RED
     text_surface = font.render(autospin_text, True, autospin_color)
     screen.blit(text_surface, (10, 40))
-
 
 # Draw the grid-based terrain
 def draw_grid(tank):
