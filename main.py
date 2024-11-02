@@ -160,6 +160,7 @@ class Tank:
         self.regen_cooldown = 0
         self.regen_cooldown_max = 180
         self.zoom = NORMAL_ZOOM
+        self.auto_turret_recoil = 0  # Add this line for auto turret recoil
 
     def adjust_dimensions(self):
         """Adjust dimensions based on zoom level"""
@@ -187,8 +188,8 @@ class Tank:
             return
 
         # Calculate screen position
-        screen_x = self.world_x - self.world_x + self.x
-        screen_y = self.world_y - self.world_y + self.y
+        screen_x = (self.world_x - self.world_x + self.x)
+        screen_y = (self.world_y - self.world_y + self.y)
 
         # Early return if tank is not visible
         if not is_on_screen(self.world_x, self.world_y, self.size + self.cannon_length, self):
@@ -199,26 +200,132 @@ class Tank:
         drawn_cannon_length = int(self.cannon_length * self.zoom)
         drawn_cannon_thickness = int(self.cannon_thickness * self.zoom)
 
-        if self.tank_type == "basic":
-            self.draw_basic_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
-        elif self.tank_type == "twin":
-            self.draw_twin_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
-        elif self.tank_type == "flank":
-            self.draw_flank_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
-        elif self.tank_type == "machine_gun":
-            self.draw_machine_gun_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
-        elif self.tank_type == "sniper":
-            self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
-        elif self.tank_type == "gunner":
-            self.draw_gunner_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
-        elif self.tank_type == "quad":
-            self.draw_quad_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+        if self.tank_type == "auto_gunner":
+            # 1. Draw gunner cannons first
+            cannon_configs = [
+                (-3, False, 0.8),  # Top short cannon - thinner
+                (-1.5, True, 1.3),  # Upper long cannon - normal thickness
+                (1.5, True, 1.3),  # Lower long cannon - normal thickness
+                (3, False, 0.8)  # Bottom short cannon - thinner
+            ]
 
-        # Draw tank outline
-        pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
+            for i, (pos, is_long, thickness_mult) in enumerate(cannon_configs):
+                base_length = self.long_cannon_length if is_long else self.short_cannon_length
+                drawn_base_length = int(base_length * self.zoom)
+                recoil_adjusted_length = drawn_base_length - (self.barrel_recoil[i] * self.zoom)
+                offset = pos * (self.cannon_separation * self.zoom)
 
-        # Draw tank body
-        pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), drawn_size)
+                cannon_start_x = screen_x + math.cos(self.angle + math.pi / 2) * offset
+                cannon_start_y = screen_y + math.sin(self.angle + math.pi / 2) * offset
+
+                cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+                cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+
+                perpendicular_angle = self.angle + math.pi / 2
+                outline_thickness = max(1, int(2 * self.zoom))
+                current_thickness = drawn_cannon_thickness * thickness_mult
+
+                outline_offset = current_thickness / 2 + outline_thickness
+                outline_points = [
+                    (cannon_start_x + math.cos(perpendicular_angle) * outline_offset,
+                     cannon_start_y + math.sin(perpendicular_angle) * outline_offset),
+                    (cannon_start_x - math.cos(perpendicular_angle) * outline_offset,
+                     cannon_start_y - math.sin(perpendicular_angle) * outline_offset),
+                    (cannon_end_x - math.cos(perpendicular_angle) * outline_offset,
+                     cannon_end_y - math.sin(perpendicular_angle) * outline_offset),
+                    (cannon_end_x + math.cos(perpendicular_angle) * outline_offset,
+                     cannon_end_y + math.sin(perpendicular_angle) * outline_offset)
+                ]
+
+                pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_points)
+
+                cannon_points = [
+                    (cannon_start_x + math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_start_y + math.sin(perpendicular_angle) * current_thickness / 2),
+                    (cannon_start_x - math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_start_y - math.sin(perpendicular_angle) * current_thickness / 2),
+                    (cannon_end_x - math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_end_y - math.sin(perpendicular_angle) * current_thickness / 2),
+                    (cannon_end_x + math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_end_y + math.sin(perpendicular_angle) * current_thickness / 2)
+                ]
+
+                pygame.draw.polygon(screen, CANNONGREY, cannon_points)
+
+            # 2. Draw tank body and outline
+            pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
+            pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), drawn_size)
+
+            # 3. Draw auto turret cannon with recoil
+            turret_cannon_length = int(self.auto_turret_cannon_length * self.zoom)
+            turret_cannon_width = int(self.auto_turret_cannon_width * self.zoom)
+
+            # Apply recoil to the cannon length
+            recoil_adjusted_turret_length = turret_cannon_length - (self.auto_turret_recoil * self.zoom)
+
+            cannon_start_x = int(screen_x)
+            cannon_start_y = int(screen_y)
+            cannon_end_x = cannon_start_x + int(math.cos(self.auto_turret_angle) * recoil_adjusted_turret_length)
+            cannon_end_y = cannon_start_y + int(math.sin(self.auto_turret_angle) * recoil_adjusted_turret_length)
+
+            perp_angle = self.auto_turret_angle + math.pi / 2
+            half_width = turret_cannon_width / 2
+            outline_width = int(2 * self.zoom)
+
+            perp_x = math.cos(perp_angle) * (half_width + outline_width)
+            perp_y = math.sin(perp_angle) * (half_width + outline_width)
+
+            outline_points = [
+                (cannon_start_x + perp_x, cannon_start_y + perp_y),
+                (cannon_start_x - perp_x, cannon_start_y - perp_y),
+                (cannon_end_x - perp_x, cannon_end_y - perp_y),
+                (cannon_end_x + perp_x, cannon_end_y + perp_y)
+            ]
+            pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_points)
+
+            perp_x = math.cos(perp_angle) * half_width
+            perp_y = math.sin(perp_angle) * half_width
+
+            cannon_points = [
+                (cannon_start_x + perp_x, cannon_start_y + perp_y),
+                (cannon_start_x - perp_x, cannon_start_y - perp_y),
+                (cannon_end_x - perp_x, cannon_end_y - perp_y),
+                (cannon_end_x + perp_x, cannon_end_y + perp_y)
+            ]
+            pygame.draw.polygon(screen, CANNONGREY, cannon_points)
+
+            end_line_start = (cannon_end_x + math.cos(perp_angle) * half_width,
+                              cannon_end_y + math.sin(perp_angle) * half_width)
+            end_line_end = (cannon_end_x - math.cos(perp_angle) * half_width,
+                            cannon_end_y - math.sin(perp_angle) * half_width)
+            pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_width)
+
+            # 4. Draw auto turret base on top of everything
+            turret_size = int(self.auto_turret_size * self.zoom)
+            pygame.draw.circle(screen, CANNONOUTLINEGREY, (int(screen_x), int(screen_y)),
+                               turret_size + int(2 * self.zoom))
+            pygame.draw.circle(screen, CANNONGREY, (int(screen_x), int(screen_y)), turret_size)
+
+        else:
+            # Original tank type drawing code...
+            if self.tank_type == "basic":
+                self.draw_basic_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+            elif self.tank_type == "twin":
+                self.draw_twin_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+            elif self.tank_type == "flank":
+                self.draw_flank_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+            elif self.tank_type == "machine_gun":
+                self.draw_machine_gun_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+            elif self.tank_type == "sniper":
+                self.draw_sniper_cannon(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+            elif self.tank_type == "gunner":
+                self.draw_gunner_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+            elif self.tank_type == "quad":
+                self.draw_quad_cannons(screen, screen_x, screen_y, drawn_cannon_length, drawn_cannon_thickness)
+
+            # Draw tank outline and body
+            pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
+            pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), drawn_size)
 
         self.draw_health_bar(screen, screen_x, screen_y, drawn_size)
 
@@ -426,7 +533,7 @@ class Tank:
             # Adjust speed based on tank type
             if self.tank_type == "sniper":
                 bullet_speed = bullet_speed * 1.5  # Sniper gets 50% more base speed
-            elif self.tank_type == "gunner":
+            elif self.tank_type == "gunner" or self.tank_type == "auto_gunner":
                 bullet_speed = bullet_speed * 1.2  # Gunner gets 20% more base speed
 
             # Calculate velocity components with the modified speed
@@ -437,11 +544,24 @@ class Tank:
             bullet = Bullet(x, y, vel_x, vel_y, 0, self)
             bullet.owner = self
 
-            # Set bullet size based on tank type
+            # Set bullet size based on tank type and firing source
             if self.tank_type == "gunner":
                 bullet.base_radius = int(BASE_BULLET_SIZE * 0.4)  # 40% of normal size
                 bullet.radius = bullet.base_radius
                 bullet.damage = self.bullet_damage * 0.4  # Reduce damage to match size
+            elif self.tank_type == "auto_gunner":
+                # Check if the bullet is being fired from the auto turret
+                bullet_angle_diff = abs((angle - self.auto_turret_angle + math.pi) % (2 * math.pi) - math.pi)
+                if bullet_angle_diff < 0.1:  # If angle is very close to auto turret angle
+                    # Auto turret bullets are slightly bigger than gunner bullets
+                    bullet.base_radius = int(BASE_BULLET_SIZE * 0.6)  # 60% of normal size
+                    bullet.radius = bullet.base_radius
+                    bullet.damage = self.bullet_damage * 0.6  # Adjust damage for auto turret
+                else:
+                    # Main gunner cannons use the same size as regular gunner
+                    bullet.base_radius = int(BASE_BULLET_SIZE * 0.4)  # 40% of normal size
+                    bullet.radius = bullet.base_radius
+                    bullet.damage = self.bullet_damage * 0.4  # Regular gunner damage
 
             self.bullets.append(bullet)
         else:
@@ -816,6 +936,16 @@ class Player(Tank):
         self.level = 1
         self.score = 0
         self.upgrade_available = False
+        # Add auto turret properties
+        self.auto_turret_size = self.base_size * 0.6  # Turret size
+        self.auto_turret_cannon_length = TILE_SIZE * 2  # 50 pixels
+        self.auto_turret_cannon_width = TILE_SIZE * 0.4  # 10 pixels
+        self.auto_turret_reload = 0
+        self.auto_turret_reload_time = 20  # Shots every 1/3 second
+        self.auto_turret_angle = 0
+        self.upgrade_available = False
+        # Add auto turret tracking
+        self.nearest_target = None
 
     def update_stats(self):
         # Health Regen
@@ -838,6 +968,49 @@ class Player(Tank):
 
         # Movement Speed (15% increase per level)
         self.speed = self.base_stats["Movement Speed"] * (1 + self.attribute_levels["Movement Speed"] * 0.15)
+
+    def update_nearest_target(self, shapes, enemies):
+        if self.tank_type != "auto_gunner":
+            return
+
+        nearest_distance = float('inf')
+        nearest_target = None
+
+        # Check shapes
+        for shape in shapes:
+            if shape.alive:
+                distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                if distance < nearest_distance and distance < SCREEN_WIDTH:  # Only target within view range
+                    nearest_distance = distance
+                    nearest_target = shape
+
+        # Check enemies
+        for enemy in enemies:
+            if enemy.alive:
+                distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
+                if distance < nearest_distance and distance < SCREEN_WIDTH:  # Only target within view range
+                    nearest_distance = distance
+                    nearest_target = enemy
+
+        self.nearest_target = nearest_target
+
+        # Update auto turret angle if we have a target
+        if self.nearest_target:
+            target_angle = math.atan2(
+                self.nearest_target.world_y - self.world_y,
+                self.nearest_target.world_x - self.world_x
+            )
+
+            # Smoothly rotate towards target
+            angle_diff = (target_angle - self.auto_turret_angle + math.pi) % (2 * math.pi) - math.pi
+            rotation_speed = 0.1  # Adjust this value to control rotation speed
+            if abs(angle_diff) > rotation_speed:
+                if angle_diff > 0:
+                    self.auto_turret_angle += rotation_speed
+                else:
+                    self.auto_turret_angle -= rotation_speed
+            else:
+                self.auto_turret_angle = target_angle
 
     def upgrade_to_twin(self):
         self.tank_type = "twin"
@@ -882,6 +1055,27 @@ class Player(Tank):
         self.cannon_separation = self.base_size * 0.3  # Smaller separation between cannons
         self.bullet_size_multiplier = 0.4  # Smaller bullets
         self.base_reload = self.base_stats["Reload"] * 0.6  # 40% faster base reload
+        self.upgrade_available = False
+
+    def upgrade_to_auto_gunner(self):
+        self.tank_type = "auto_gunner"
+        # Keep gunner's existing properties
+        self.long_cannon_length = TILE_SIZE * 2.8  # 70 pixels for middle cannons
+        self.short_cannon_length = TILE_SIZE * 2.4  # 60 pixels for outer cannons
+        self.cannon_thickness = TILE_SIZE * 0.5  # 10 pixels
+        self.barrel_recoil = [0, 0, 0, 0]  # One for each cannon
+        self.cannon_separation = self.base_size * 0.3  # Smaller separation between cannons
+        self.bullet_size_multiplier = 0.4  # Smaller bullets
+        self.base_reload = self.base_stats["Reload"] * 0.6  # 40% faster base reload
+
+        # Auto turret specific properties
+        self.auto_turret_angle = 0
+        self.auto_turret_reload = 0
+        # Remove the fixed reload time since it will be calculated based on reload stat
+        self.auto_turret_size = self.base_size * 0.6
+        self.auto_turret_cannon_length = TILE_SIZE * 2
+        self.auto_turret_cannon_width = TILE_SIZE * 0.6
+        self.auto_turret_recoil = 0
         self.upgrade_available = False
 
     def upgrade_to_quad(self):
@@ -980,6 +1174,34 @@ class Player(Tank):
             if self.barrel_recoil[i] > 0:
                 self.barrel_recoil[i] = max(0, self.barrel_recoil[i] - self.barrel_recoil_speed)
 
+        if self.tank_type == "auto_gunner":
+            if self.auto_turret_reload > 0:
+                self.auto_turret_reload -= 1
+
+            if self.auto_turret_reload <= 0 and self.nearest_target:
+                # Calculate bullet position at the end of the turret cannon
+                recoil_adjusted_length = self.auto_turret_cannon_length - self.auto_turret_recoil
+                bullet_x = self.world_x + math.cos(self.auto_turret_angle) * (
+                        recoil_adjusted_length + self.size * 0.3)
+                bullet_y = self.world_y + math.sin(self.auto_turret_angle) * (
+                        recoil_adjusted_length + self.size * 0.3)
+
+                # Create bullet from auto turret
+                self.create_bullet(bullet_x, bullet_y, self.auto_turret_angle)
+
+                # Calculate auto turret reload time based on reload stat
+                # Base reload time of 20, reduced by reload attribute
+                base_auto_turret_reload = 20
+                reload_multiplier = 1 / (1 + self.attribute_levels["Reload"] * 0.15)  # Same formula as main reload
+                self.auto_turret_reload = int(base_auto_turret_reload * reload_multiplier)
+
+                # Add recoil when firing
+                self.auto_turret_recoil = self.max_barrel_recoil * 0.7  # Slightly less recoil for auto turret
+
+        # Add auto turret recoil recovery
+        if self.auto_turret_recoil > 0:
+            self.auto_turret_recoil = max(0, self.auto_turret_recoil - self.barrel_recoil_speed)
+
     def rotate_to_mouse(self, mouse_pos):
         if self.autospin:
             self.angle += 0.05
@@ -994,7 +1216,10 @@ class Player(Tank):
                 self.shoot_cooldown = self.base_reload
             elif self.tank_type == "gunner":
                 self.shoot_gunner()
-                self.shoot_cooldown = self.base_reload * 0.4  # Even faster shooting
+                self.shoot_cooldown = self.base_reload * 0.4
+            elif self.tank_type == "auto_gunner":
+                self.shoot_gunner()  # Use the same gunner shooting mechanics
+                self.shoot_cooldown = self.base_reload * 0.4
             elif self.tank_type == "quad":
                 self.shoot_quad()
                 self.shoot_cooldown = self.base_reload
@@ -1241,6 +1466,29 @@ class Player(Tank):
                         self.world_y += math.sin(angle) * push_distance / 2
                         shape.world_x -= math.cos(angle) * push_distance / 2
                         shape.world_y -= math.sin(angle) * push_distance / 2
+
+    def find_nearest_target(self, shapes, enemies):
+        nearest_distance = float('inf')
+        nearest_target = None
+
+        # Check shapes
+        for shape in shapes:
+            if shape.alive:
+                distance = math.sqrt((self.world_x - shape.world_x) ** 2 + (self.world_y - shape.world_y) ** 2)
+                if distance < nearest_distance:
+                    nearest_distance = distance
+                    nearest_target = shape
+
+        # Check enemies
+        if enemies:
+            for enemy in enemies:
+                if enemy.alive:
+                    distance = math.sqrt((self.world_x - enemy.world_x) ** 2 + (self.world_y - enemy.world_y) ** 2)
+                    if distance < nearest_distance:
+                        nearest_distance = distance
+                        nearest_target = enemy
+
+        return nearest_target
 
 
 class Bullet:
@@ -1621,6 +1869,16 @@ def draw_upgrade_buttons(screen, tank):
         text = font.render("Quad Tank", True, BLACK)
         text_rect = text.get_rect(center=button_rect.center)
         screen.blit(text, text_rect)
+    if tank.level >= 45 and tank.tank_type == "gunner":
+        font = pygame.font.SysFont(None, 24)
+        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
+                                UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+        pygame.draw.rect(screen, WHITE, button_rect)
+        pygame.draw.rect(screen, BLACK, button_rect, 2)
+
+        text = font.render("Auto Gunner", True, BLACK)
+        text_rect = text.get_rect(center=button_rect.center)
+        screen.blit(text, text_rect)
 
 def handle_upgrade_click(tank, mouse_pos):
     if tank.level >= 15 and tank.tank_type == "basic":
@@ -1651,7 +1909,12 @@ def handle_upgrade_click(tank, mouse_pos):
         if button_rect.collidepoint(mouse_pos):
             tank.upgrade_to_quad()
             return True
-    return False
+    if tank.level >= 45 and tank.tank_type == "gunner":
+        button_rect = pygame.Rect(UPGRADE_BUTTON_MARGIN, UPGRADE_BUTTON_MARGIN,
+                                UPGRADE_BUTTON_WIDTH, UPGRADE_BUTTON_HEIGHT)
+        if button_rect.collidepoint(mouse_pos):
+            tank.upgrade_to_auto_gunner()
+            return True
     return False
 
 def create_attributes_surface(player):
@@ -2252,6 +2515,7 @@ def game_loop():
             player.update(keys_pressed)
             player.rotate_to_mouse(pygame.mouse.get_pos())
             player.handle_autofire()
+            player.update_nearest_target(shapes, enemies if include_enemies else [])
 
             for shape in shapes:
                 shape.update(shapes)
