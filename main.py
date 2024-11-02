@@ -205,112 +205,6 @@ class Tank:
         drawn_cannon_length = int(self.cannon_length * self.zoom)
         drawn_cannon_thickness = int(self.cannon_thickness * self.zoom)
 
-        if self.tank_type == "auto_gunner":
-            # 1. Draw gunner cannons first
-            cannon_configs = [
-                (-3, False, 0.8),  # Top short cannon - thinner
-                (-1.5, True, 1.3),  # Upper long cannon - normal thickness
-                (1.5, True, 1.3),  # Lower long cannon - normal thickness
-                (3, False, 0.8)  # Bottom short cannon - thinner
-            ]
-
-            for i, (pos, is_long, thickness_mult) in enumerate(cannon_configs):
-                base_length = self.long_cannon_length if is_long else self.short_cannon_length
-                drawn_base_length = int(base_length * self.zoom)
-                recoil_adjusted_length = drawn_base_length - (self.barrel_recoil[i] * self.zoom)
-                offset = pos * (self.cannon_separation * self.zoom)
-
-                cannon_start_x = screen_x + math.cos(self.angle + math.pi / 2) * offset
-                cannon_start_y = screen_y + math.sin(self.angle + math.pi / 2) * offset
-
-                cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
-                cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
-
-                perpendicular_angle = self.angle + math.pi / 2
-                outline_thickness = max(1, int(2 * self.zoom))
-                current_thickness = drawn_cannon_thickness * thickness_mult
-
-                outline_offset = current_thickness / 2 + outline_thickness
-                outline_points = [
-                    (cannon_start_x + math.cos(perpendicular_angle) * outline_offset,
-                     cannon_start_y + math.sin(perpendicular_angle) * outline_offset),
-                    (cannon_start_x - math.cos(perpendicular_angle) * outline_offset,
-                     cannon_start_y - math.sin(perpendicular_angle) * outline_offset),
-                    (cannon_end_x - math.cos(perpendicular_angle) * outline_offset,
-                     cannon_end_y - math.sin(perpendicular_angle) * outline_offset),
-                    (cannon_end_x + math.cos(perpendicular_angle) * outline_offset,
-                     cannon_end_y + math.sin(perpendicular_angle) * outline_offset)
-                ]
-
-                pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_points)
-
-                cannon_points = [
-                    (cannon_start_x + math.cos(perpendicular_angle) * current_thickness / 2,
-                     cannon_start_y + math.sin(perpendicular_angle) * current_thickness / 2),
-                    (cannon_start_x - math.cos(perpendicular_angle) * current_thickness / 2,
-                     cannon_start_y - math.sin(perpendicular_angle) * current_thickness / 2),
-                    (cannon_end_x - math.cos(perpendicular_angle) * current_thickness / 2,
-                     cannon_end_y - math.sin(perpendicular_angle) * current_thickness / 2),
-                    (cannon_end_x + math.cos(perpendicular_angle) * current_thickness / 2,
-                     cannon_end_y + math.sin(perpendicular_angle) * current_thickness / 2)
-                ]
-
-                pygame.draw.polygon(screen, CANNONGREY, cannon_points)
-
-            # 2. Draw tank body and outline
-            pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
-            pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), drawn_size)
-
-            # 3. Draw auto turret cannon with recoil
-            turret_cannon_length = int(self.auto_turret_cannon_length * self.zoom)
-            turret_cannon_width = int(self.auto_turret_cannon_width * self.zoom)
-
-            # Apply recoil to the cannon length
-            recoil_adjusted_turret_length = turret_cannon_length - (self.auto_turret_recoil * self.zoom)
-
-            cannon_start_x = int(screen_x)
-            cannon_start_y = int(screen_y)
-            cannon_end_x = cannon_start_x + int(math.cos(self.auto_turret_angle) * recoil_adjusted_turret_length)
-            cannon_end_y = cannon_start_y + int(math.sin(self.auto_turret_angle) * recoil_adjusted_turret_length)
-
-            perp_angle = self.auto_turret_angle + math.pi / 2
-            half_width = turret_cannon_width / 2
-            outline_width = int(2 * self.zoom)
-
-            perp_x = math.cos(perp_angle) * (half_width + outline_width)
-            perp_y = math.sin(perp_angle) * (half_width + outline_width)
-
-            outline_points = [
-                (cannon_start_x + perp_x, cannon_start_y + perp_y),
-                (cannon_start_x - perp_x, cannon_start_y - perp_y),
-                (cannon_end_x - perp_x, cannon_end_y - perp_y),
-                (cannon_end_x + perp_x, cannon_end_y + perp_y)
-            ]
-            pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_points)
-
-            perp_x = math.cos(perp_angle) * half_width
-            perp_y = math.sin(perp_angle) * half_width
-
-            cannon_points = [
-                (cannon_start_x + perp_x, cannon_start_y + perp_y),
-                (cannon_start_x - perp_x, cannon_start_y - perp_y),
-                (cannon_end_x - perp_x, cannon_end_y - perp_y),
-                (cannon_end_x + perp_x, cannon_end_y + perp_y)
-            ]
-            pygame.draw.polygon(screen, CANNONGREY, cannon_points)
-
-            end_line_start = (cannon_end_x + math.cos(perp_angle) * half_width,
-                              cannon_end_y + math.sin(perp_angle) * half_width)
-            end_line_end = (cannon_end_x - math.cos(perp_angle) * half_width,
-                            cannon_end_y - math.sin(perp_angle) * half_width)
-            pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_width)
-
-            # 4. Draw auto turret base on top of everything
-            turret_size = int(self.auto_turret_size * self.zoom)
-            pygame.draw.circle(screen, CANNONOUTLINEGREY, (int(screen_x), int(screen_y)),
-                               turret_size + int(2 * self.zoom))
-            pygame.draw.circle(screen, CANNONGREY, (int(screen_x), int(screen_y)), turret_size)
-
         if self.tank_type == "auto_quad":
 
             # 1. Draw quad tank cannons first
@@ -475,6 +369,108 @@ class Tank:
                                turret_size + int(2 * self.zoom))
 
             pygame.draw.circle(screen, CANNONGREY, (int(screen_x), int(screen_y)), turret_size)
+
+        elif self.tank_type == "auto_gunner":
+            # 1. Draw gunner cannons first (bottom layer)
+            cannon_configs = [
+                (-3, False, 0.8),  # Top short cannon - thinner
+                (-1.5, True, 1.3),  # Upper long cannon - normal thickness
+                (1.5, True, 1.3),  # Lower long cannon - normal thickness
+                (3, False, 0.8)  # Bottom short cannon - thinner
+            ]
+
+            for i, (pos, is_long, thickness_mult) in enumerate(cannon_configs):
+                base_length = self.long_cannon_length if is_long else self.short_cannon_length
+                drawn_base_length = int(base_length * self.zoom)
+                recoil_adjusted_length = drawn_base_length - (self.barrel_recoil[i] * self.zoom)
+                offset = pos * (self.cannon_separation * self.zoom)
+
+                cannon_start_x = screen_x + math.cos(self.angle + math.pi / 2) * offset
+                cannon_start_y = screen_y + math.sin(self.angle + math.pi / 2) * offset
+
+                cannon_end_x = cannon_start_x + math.cos(self.angle) * recoil_adjusted_length
+                cannon_end_y = cannon_start_y + math.sin(self.angle) * recoil_adjusted_length
+
+                perpendicular_angle = self.angle + math.pi / 2
+                outline_thickness = max(1, int(2 * self.zoom))
+                current_thickness = drawn_cannon_thickness * thickness_mult
+
+                outline_offset = current_thickness / 2 + outline_thickness
+                outline_points = [
+                    (cannon_start_x + math.cos(perpendicular_angle) * outline_offset,
+                     cannon_start_y + math.sin(perpendicular_angle) * outline_offset),
+                    (cannon_start_x - math.cos(perpendicular_angle) * outline_offset,
+                     cannon_start_y - math.sin(perpendicular_angle) * outline_offset),
+                    (cannon_end_x - math.cos(perpendicular_angle) * outline_offset,
+                     cannon_end_y - math.sin(perpendicular_angle) * outline_offset),
+                    (cannon_end_x + math.cos(perpendicular_angle) * outline_offset,
+                     cannon_end_y + math.sin(perpendicular_angle) * outline_offset)
+                ]
+
+                pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_points)
+
+                cannon_points = [
+                    (cannon_start_x + math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_start_y + math.sin(perpendicular_angle) * current_thickness / 2),
+                    (cannon_start_x - math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_start_y - math.sin(perpendicular_angle) * current_thickness / 2),
+                    (cannon_end_x - math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_end_y - math.sin(perpendicular_angle) * current_thickness / 2),
+                    (cannon_end_x + math.cos(perpendicular_angle) * current_thickness / 2,
+                     cannon_end_y + math.sin(perpendicular_angle) * current_thickness / 2)
+                ]
+
+                pygame.draw.polygon(screen, CANNONGREY, cannon_points)
+
+            # 2. Draw tank body and outline (middle layer)
+            pygame.draw.circle(screen, TANKOUTLINE, (int(screen_x), int(screen_y)), drawn_size + int(4 * self.zoom))
+            pygame.draw.circle(screen, self.color, (int(screen_x), int(screen_y)), drawn_size)
+
+            # 3. Draw auto turret cannon (top layer)
+            turret_cannon_length = int(self.auto_turret_cannon_length * self.zoom)
+            turret_cannon_width = int(self.auto_turret_cannon_width * self.zoom)
+            recoil_adjusted_turret_length = turret_cannon_length - (self.auto_turret_recoil * self.zoom)
+
+            cannon_start_x = int(screen_x)
+            cannon_start_y = int(screen_y)
+            cannon_end_x = cannon_start_x + int(math.cos(self.auto_turret_angle) * recoil_adjusted_turret_length)
+            cannon_end_y = cannon_start_y + int(math.sin(self.auto_turret_angle) * recoil_adjusted_turret_length)
+
+            perp_angle = self.auto_turret_angle + math.pi / 2
+            half_width = turret_cannon_width / 2
+            outline_width = int(2 * self.zoom)
+
+            perp_x = math.cos(perp_angle) * (half_width + outline_width)
+            perp_y = math.sin(perp_angle) * (half_width + outline_width)
+
+            outline_points = [
+                (cannon_start_x + perp_x, cannon_start_y + perp_y),
+                (cannon_start_x - perp_x, cannon_start_y - perp_y),
+                (cannon_end_x - perp_x, cannon_end_y - perp_y),
+                (cannon_end_x + perp_x, cannon_end_y + perp_y)
+            ]
+            pygame.draw.polygon(screen, CANNONOUTLINEGREY, outline_points)
+
+            perp_x = math.cos(perp_angle) * half_width
+            perp_y = math.sin(perp_angle) * half_width
+
+            cannon_points = [
+                (cannon_start_x + perp_x, cannon_start_y + perp_y),
+                (cannon_start_x - perp_x, cannon_start_y - perp_y),
+                (cannon_end_x - perp_x, cannon_end_y - perp_y),
+                (cannon_end_x + perp_x, cannon_end_y + perp_y)
+            ]
+            pygame.draw.polygon(screen, CANNONGREY, cannon_points)
+
+            # 4. Draw auto turret base on top of everything
+            turret_size = int(self.auto_turret_size * self.zoom)
+            pygame.draw.circle(screen, CANNONOUTLINEGREY, (int(screen_x), int(screen_y)),
+                               turret_size + int(2 * self.zoom))
+            pygame.draw.circle(screen, CANNONGREY, (int(screen_x), int(screen_y)), turret_size)
+            # Add end cap outline
+            end_line_start = (cannon_end_x - perp_x, cannon_end_y - perp_y)
+            end_line_end = (cannon_end_x + perp_x, cannon_end_y + perp_y)
+            pygame.draw.line(screen, CANNONOUTLINEGREY, end_line_start, end_line_end, outline_width)
 
 
         else:
@@ -2988,4 +2984,3 @@ if __name__ == "__main__":
     pygame.display.set_caption("Diep.io")
     clock = pygame.time.Clock()
     game_loop()
-
